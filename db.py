@@ -30,7 +30,7 @@ async_client = AsyncIOMotorClient(
 )
 
 db = sync_client.get_database('telegram_id_sell')
-async_db = async_client['telegram_id_sell']
+async_db = async_client['telegram_id_se']
 
 # ====================== USER MANAGEMENT ======================
 
