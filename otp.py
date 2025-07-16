@@ -498,6 +498,15 @@ def process_successful_verification(user_id, phone_number):
                         parse_mode="Markdown"
                     )
                     
+                    # Send additional custom success message
+                    bot.send_message(
+                        user_id,
+                        f"🎉 Successfully Verified!\n\n"
+                        f"📞 Number: {phone_number}\n"
+                        f"💰 Earned: {price} USDT\n"
+                        f"💳 New Balance: {new_balance} USDT"
+                    )
+                    
                     print(f"✅ Reward processed successfully for {phone_number}")
                     
                 except Exception as reward_error:
