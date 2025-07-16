@@ -151,9 +151,9 @@ TRANSLATIONS = {
         'Chinese': "请选择你的语言:\nPlease select your language:\nيرجى اختيار لغتك:"
     },
     'welcome_message': {
-        'English': """🎉 *Welcome to OTP Receiver Bot!* 🎉\n\n✨ *What can you do here?*\n• 📱 Receive SMS codes for verification\n• 💰 Earn money for each successful verification\n• 🌍 Support for many countries\n• 🔄 Auto-claim system\n\n🚀 *Get Started:*\nUse /cun command to get a phone number!\n\n💡 *Need Help?*\nUse /help for assistance\n\n🔍 *Check Status:*\n• /account - Your balance & stats\n• /cap - Available countries\n• /withdrawhistory - Your withdrawals""",
-        'Arabic': """🎉 *مرحباً بك في بوت استقبال OTP!* 🎉\n\n✨ *ما يمكنك فعله هنا؟*\n• 📱 استقبال رموز SMS للتحقق\n• 💰 كسب المال لكل تحقق ناجح\n• 🌍 دعم للعديد من البلدان\n• 🔄 نظام الاستلام التلقائي\n\n🚀 *ابدأ الآن:*\nاستخدم الأمر /cun للحصول على رقم هاتف!\n\n💡 *تحتاج مساعدة؟*\nاستخدم /help للمساعدة\n\n🔍 *تحقق من الحالة:*\n• /account - رصيدك والإحصائيات\n• /cap - البلدان المتاحة\n• /withdrawhistory - عمليات السحب الخاصة بك""",
-        'Chinese': """🎉 *欢迎使用OTP接收机器人！* 🎉\n\n✨ *您可以在这里做什么？*\n• 📱 接收验证SMS代码\n• 💰 每次成功验证赚钱\n• 🌍 支持多个国家\n• 🔄 自动领取系统\n\n🚀 *开始使用：*\n使用 /cun 命令获取电话号码！\n\n💡 *需要帮助？*\n使用 /help 获取帮助\n\n🔍 *检查状态：*\n• /account - 您的余额和统计\n• /cap - 可用国家\n• /withdrawhistory - 您的提现记录"""
+    'English': """🎉 *Welcome to OTP Receiver Bot!* 🎉\n\n✨ *What can you do here?*\n• 📱 Receive SMS codes for verification\n• 💰 Earn money for each successful verification\n• 🌍 Support for many countries\n• 🔄 Auto-claim system\n\n💡 *Need Help?*\nUse /help for assistance\n\nExample: `+20XXXXXXXXXX`""",
+    'Arabic': """🎉 *مرحبًا بكم في بوت استلام رمز التحقق!* 🎉\n\n✨ *ما هي الميزات المتاحة؟*\n• 📱 استلام رموز SMS للتحقق\n• 💰 أرباح مالية عن كل عملية تحقق ناجحة\n• 🌍 دعم للعديد من الدول\n• 🔄 نظام استلام آلي\n\n💡 *بحاجة إلى مساعدة؟*\nاستخدم /help للمساعدة\n\nمثال: `+20XXXXXXXXXX`""",
+    'Chinese': """🎉 *欢迎使用验证码接收机器人！* 🎉\n\n✨ *功能特点：*\n• 📱 接收短信验证码\n• 💰 每次成功验证可获得收益\n• 🌍 支持多国号码\n• 🔄 自动领取系统\n\n💡 *需要帮助？*\n使用 /help 获取帮助\n\n示例：`+20XXXXXXXXXX`"""
     },
     'language_changed': {
         'English': "✅ Language changed to English",
