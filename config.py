@@ -6,7 +6,7 @@ load_dotenv()
 # Telegram API
 API_ID = int(os.getenv('API_ID', 20094764))
 API_HASH = os.getenv('API_HASH', 'ac33c77cfdbe4f94ebd73dde27b4a10c')
-BOT_TOKEN = os.getenv('BOT_TOKEN', '7246099288:AAGEgP5hFkY3NJicptMgHInQ1APDTMBJT8M')
+BOT_TOKEN = os.getenv('BOT_TOKEN', '8033915874:AAEGOEwc66mH3fNhdYg1s4z6N370hiTcxtc')
 
 # OTP Settings
 DEFAULT_2FA_PASSWORD = os.getenv('DEFAULT_2FA_PASSWORD', '112233')
