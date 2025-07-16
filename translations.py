@@ -75,9 +75,9 @@ TRANSLATIONS = {
         'Chinese': "🛑 *验证已取消*\n\n📞 号码: `{phone}`\n🔄 此号码现在可以再次使用\n🗑️ 所有验证数据已清除"
     },
     'help_support': {
-    'English': """🆘 Help & Support 🆘\n\nIf you need assistance, please contact our support team:\n👉 @DragonReceiverbot1""",
-    'Arabic': """🆘 المساعدة والدعم 🆘\n\nإذا كنت بحاجة إلى المساعدة، يرجى التواصل مع فريق الدعم لدينا:\n👉 @DragonReceiverbot1""",
-    'Chinese': """🆘 帮助与支持 🆘\n\n如果您需要帮助，请联系我们的支持团队：\n👉 @DragonReceiverbot1"""
+    'English': """🆘 Help & Support 🆘\n\nIf you need assistance, please contact our support team:\n👉 @DragonReceiver""",
+    'Arabic': """🆘 المساعدة والدعم 🆘\n\nإذا كنت بحاجة إلى المساعدة، يرجى التواصل مع فريق الدعم لدينا:\n👉 @DragonReceiver""",
+    'Chinese': """🆘 帮助与支持 🆘\n\n如果您需要帮助，请联系我们的支持团队：\n👉 @DragonReceiver"""
     },
     'no_pending_verification': {
         'English': "❌ You have no pending phone verification to cancel.",
