@@ -97,9 +97,9 @@ TRANSLATIONS = {
     
     # Withdrawal Messages
     'minimum_withdrawal': {
-        'English': "Minimum withdrawal is 1$",
-        'Arabic': "الحد الأدنى للسحب هو 1$",
-        'Chinese': "最低提现金额为1美元"
+    'English': "Minimum withdrawal is 2$",
+    'Arabic': "الحد الأدنى للسحب هو 2$",
+    'Chinese': "最低提现金额为2美元"
     },
     'pending_withdrawal_exists': {
         'English': "You already have a pending withdrawal",
