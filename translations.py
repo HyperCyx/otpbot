@@ -75,9 +75,9 @@ TRANSLATIONS = {
         'Chinese': "🛑 *验证已取消*\n\n📞 号码: `{phone}`\n🔄 此号码现在可以再次使用\n🗑️ 所有验证数据已清除"
     },
     'help_support': {
-        'English': """🆘 Help & Support 🆘\n\nIf you need assistance, please contact our support team:\n👉 @DragonReceiverbot1\n\nCommon commands:\n/account - View your account information\n/withdraw - Request a withdrawal\n/withdrawhistory - View your withdrawal history\n/cap - View available countries and capacities\n""",
-        'Arabic': """🆘 المساعدة والدعم 🆘\n\nإذا كنت بحاجة إلى المساعدة، يرجى التواصل مع فريق الدعم لدينا:\n👉 @DragonReceiverbot1\n\nالأوامر الشائعة:\n/account - عرض معلومات حسابك\n/withdraw - طلب سحب\n/withdrawhistory - عرض سجل السحب الخاص بك\n/cap - عرض الدول والسعات المتاحة\n""",
-        'Chinese': """🆘 帮助与支持 🆘\n\n如果您需要帮助，请联系我们的支持团队：\n👉 @DragonReceiverbot1\n\n常用命令:\n/account - 查看您的账户信息\n/withdraw - 申请提现\n/withdrawhistory - 查看您的提现历史\n/cap - 查看可用国家和容量\n"""
+    'English': """🆘 Help & Support 🆘\n\nIf you need assistance, please contact our support team:\n👉 @DragonReceiverbot1""",
+    'Arabic': """🆘 المساعدة والدعم 🆘\n\nإذا كنت بحاجة إلى المساعدة، يرجى التواصل مع فريق الدعم لدينا:\n👉 @DragonReceiverbot1""",
+    'Chinese': """🆘 帮助与支持 🆘\n\n如果您需要帮助，请联系我们的支持团队：\n👉 @DragonReceiverbot1"""
     },
     'no_pending_verification': {
         'English': "❌ You have no pending phone verification to cancel.",
@@ -151,9 +151,9 @@ TRANSLATIONS = {
         'Chinese': "请选择你的语言:\nPlease select your language:\nيرجى اختيار لغتك:"
     },
     'welcome_message': {
-    'English': """🎉 *Welcome to OTP Receiver Bot!* 🎉\n\n✨ *What can you do here?*\n• 📱 Receive SMS codes for verification\n• 💰 Earn money for each successful verification\n• 🌍 Support for many countries\n• 🔄 Auto-claim system\n\n💡 *Need Help?*\nUse /help for assistance\n\nExample: `+20XXXXXXXXXX`""",
-    'Arabic': """🎉 *مرحبًا بكم في بوت استلام رمز التحقق!* 🎉\n\n✨ *ما هي الميزات المتاحة؟*\n• 📱 استلام رموز SMS للتحقق\n• 💰 أرباح مالية عن كل عملية تحقق ناجحة\n• 🌍 دعم للعديد من الدول\n• 🔄 نظام استلام آلي\n\n💡 *بحاجة إلى مساعدة؟*\nاستخدم /help للمساعدة\n\nمثال: `+20XXXXXXXXXX`""",
-    'Chinese': """🎉 *欢迎使用验证码接收机器人！* 🎉\n\n✨ *功能特点：*\n• 📱 接收短信验证码\n• 💰 每次成功验证可获得收益\n• 🌍 支持多国号码\n• 🔄 自动领取系统\n\n💡 *需要帮助？*\n使用 /help 获取帮助\n\n示例：`+20XXXXXXXXXX`"""
+    'English': """🎉 *Welcome to Dragon Receiver Bot!* 🎉\n\n💡 *Need Help?*\nUse /help for assistance\n\nExample: `+20XXXXXXXXXX`""",
+    'Arabic': """🎉 *مرحبًا بكم في بوت دراجون لاستلام الرموز!* 🎉\n\n💡 *بحاجة إلى مساعدة؟*\nاستخدم /help للمساعدة\n\nمثال: `+20XXXXXXXXXX`""",
+    'Chinese': """🎉 *欢迎使用Dragon验证码接收机器人！* 🎉\n\n💡 *需要帮助？*\n使用 /help 获取帮助\n\n示例：`+20XXXXXXXXXX`"""
     },
     'language_changed': {
         'English': "✅ Language changed to English",
