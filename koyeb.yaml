@@ -20,7 +20,7 @@ services:
       - name: MONGO_URI
         value: "mongodb+srv://noob:K3a4ofLngiMG8Hl9@tele.fjm9acq.mongodb.net/?retryWrites=true&w=majority"
       - name: REQUESTED_CHANNEL
-        value: "@DragonReceiverbot22"
+        value: "@DragonReceiver22"
       - name: WITHDRAWAL_LOG_CHAT_ID
         value: "-1002538505443"
       - name: ADMIN_IDS
