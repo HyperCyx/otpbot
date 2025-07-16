@@ -163,9 +163,9 @@ TRANSLATIONS = {
     
     # Account Messages
     'account_info': {
-        'English': """📊 *Account Information*\n\n👤 Name: {name}\n💳 Balance: `{balance}` USDT\n📱 Numbers Used: {sent_accounts}\n📅 Member Since: {registered_date}\n\n💰 *Quick Actions:*\n• /withdraw - Request withdrawal\n• /withdrawhistory - View history\n• /cun - Get new number""",
-        'Arabic': """📊 *معلومات الحساب*\n\n👤 الاسم: {name}\n💳 الرصيد: `{balance}` USDT\n📱 الأرقام المستخدمة: {sent_accounts}\n📅 عضو منذ: {registered_date}\n\n💰 *إجراءات سريعة:*\n• /withdraw - طلب سحب\n• /withdrawhistory - عرض السجل\n• /cun - الحصول على رقم جديد""",
-        'Chinese': """📊 *账户信息*\n\n👤 姓名: {name}\n💳 余额: `{balance}` USDT\n📱 已用号码: {sent_accounts}\n📅 注册时间: {registered_date}\n\n💰 *快速操作：*\n• /withdraw - 申请提现\n• /withdrawhistory - 查看历史\n• /cun - 获取新号码"""
+    'English': """📊 *Account Information*\n\n👤 Name: {name}\n💳 Balance: `{balance}` USDT\n📱 Numbers Used: {sent_accounts}\n📅 Member Since: {registered_date}\n\n💰 *Quick Actions:*\n• /withdrawhistory - View history""",
+    'Arabic': """📊 *معلومات الحساب*\n\n👤 الاسم: {name}\n💳 الرصيد: `{balance}` USDT\n📱 الأرقام المستخدمة: {sent_accounts}\n📅 عضو منذ: {registered_date}\n\n💰 *إجراءات سريعة:*\n• /withdrawhistory - عرض السجل""",
+    'Chinese': """📊 *账户信息*\n\n👤 姓名: {name}\n💳 余额: `{balance}` USDT\n📱 已用号码: {sent_accounts}\n📅 注册时间: {registered_date}\n\n💰 *快速操作：*\n• /withdrawhistory - 查看历史"""
     },
     
     # System Messages
