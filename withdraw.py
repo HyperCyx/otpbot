@@ -17,7 +17,7 @@ user_withdraw_state = {}
 
 def check_withdraw_conditions(user_id, balance, user_language='English'):
     """Shared function to check withdrawal conditions"""
-    if balance < 1.0:
+    if balance < 2.0:
         return get_text('minimum_withdrawal', user_language)
     if get_pending_withdrawal(user_id):
         return get_text('pending_withdrawal_exists', user_language)
