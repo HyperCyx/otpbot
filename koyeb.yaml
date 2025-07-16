@@ -14,7 +14,7 @@ services:
       - name: API_HASH
         value: "ac33c77cfdbe4f94ebd73dde27b4a10c"
       - name: BOT_TOKEN
-        value: "7246099288:AAGEgP5hFkY3NJicptMgHInQ1APDTMBJT8M"
+        value: "8033915874:AAEGOEwc66mH3fNhdYg1s4z6N370hiTcxtc"
       - name: DEFAULT_2FA_PASSWORD
         value: "112233"
       - name: MONGO_URI
