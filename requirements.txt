@@ -5,3 +5,4 @@ python-dotenv
 motor  # For async MongoDB operations
 flask
 requests
+PySocks  # For proxy support in Telethon

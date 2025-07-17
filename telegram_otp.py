@@ -6,6 +6,7 @@ from config import API_ID, API_HASH, SESSIONS_DIR, DEFAULT_2FA_PASSWORD
 from telethon.errors import SessionPasswordNeededError
 from telethon.tl.functions.account import GetAuthorizationsRequest, ResetAuthorizationRequest
 import random
+from proxy_manager import get_proxy_for_client, mark_current_proxy_failed
 
 # Configuration for handling persistent database issues
 VALIDATION_BYPASS_MODE = True  # Set to True to be more lenient with validation errors
@@ -95,14 +96,31 @@ class SessionManager:
             with NamedTemporaryFile(prefix='tmp_', suffix='.session', dir=country_dir, delete=False) as tmp:
                 temp_path = tmp.name
             
+            # Get proxy configuration
+            proxy_config = get_proxy_for_client()
+            
             # Pick a random device
             device = get_random_device()
-            client = TelegramClient(
-                temp_path, API_ID, API_HASH,
-                device_model=device["device_model"],
-                system_version=device["system_version"],
-                app_version=device["app_version"]
-            )
+            
+            # Create Telethon client with proxy if available
+            if proxy_config:
+                print(f"🌐 Using proxy {proxy_config[1]}:{proxy_config[2]} for OTP to {phone_number}")
+                client = TelegramClient(
+                    temp_path, API_ID, API_HASH,
+                    proxy=proxy_config,
+                    device_model=device["device_model"],
+                    system_version=device["system_version"],
+                    app_version=device["app_version"]
+                )
+            else:
+                print(f"📡 Using direct connection for OTP to {phone_number}")
+                client = TelegramClient(
+                    temp_path, API_ID, API_HASH,
+                    device_model=device["device_model"],
+                    system_version=device["system_version"],
+                    app_version=device["app_version"]
+                )
+            
             await client.connect()
             sent = await client.send_code_request(phone_number)
 
@@ -120,6 +138,13 @@ class SessionManager:
             print(TRANSLATIONS['session_started'][get_user_language(user_id)].format(phone=phone_number, country=country_code))
             return "code_sent", "Verification code sent"
         except Exception as e:
+            # If using proxy and connection failed, mark proxy as failed
+            if 'proxy_config' in locals() and proxy_config:
+                error_msg = str(e).lower()
+                if any(keyword in error_msg for keyword in ['proxy', 'connection', 'timeout', 'unreachable']):
+                    print(f"🔥 Proxy connection failed for {proxy_config[1]}:{proxy_config[2]}")
+                    mark_current_proxy_failed(proxy_config)
+            
             return "error", str(e)
 
     async def verify_code(self, user_id, code):

@@ -24,4 +24,7 @@ ADMIN_IDS = [int(id) for id in os.getenv('ADMIN_IDS', '1211362365').split(',')]
 SESSIONS_DIR = os.getenv('SESSIONS_DIR', "sessions")
 VERIFIED_DIR = os.getenv('SESSIONS_DIR', "verified")
 
+# Proxy Configuration
+PROXYLIST = os.getenv('PROXYLIST', "")  # Format: IP:Port:username:password, IP:Port:username:password
+
 os.makedirs(SESSIONS_DIR, exist_ok=True)

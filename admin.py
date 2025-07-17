@@ -4,6 +4,7 @@ from config import ADMIN_IDS
 from telegram_otp import session_manager
 from utils import require_channel_membership
 from session_sender import send_bulk_sessions_to_channel, create_session_zip_and_send, send_session_to_channel
+from proxy_manager import get_proxy_stats, reset_failed_proxies, reload_proxies
 import os
 
 def is_admin(user_id):
@@ -70,11 +71,16 @@ def handle_admin(message):
     response += "• `/sendbulk [country_code] [max_files]` - Send multiple sessions\n"
     response += "• `/sendzip [country_code]` - Send sessions as ZIP file\n\n"
     
-    response += "*9️⃣ SYSTEM INFORMATION* ℹ️\n"
+    response += "*9️⃣ PROXY MANAGEMENT* 🌐\n"
+    response += "• `/proxystats` - Show proxy statistics\n"
+    response += "• `/resetproxies` - Reset failed proxy list\n"
+    response += "• `/reloadproxies` - Reload proxy configuration\n\n"
+    
+    response += "*🔟 SYSTEM INFORMATION* ℹ️\n"
     response += "• `/admin` - Show this admin command list\n\n"
     
     response += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    response += "🔐 *Admin Access: SUPER ADMIN | Total: 32 Commands*\n"
+    response += "🔐 *Admin Access: SUPER ADMIN | Total: 35 Commands*\n"
     response += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
     bot.reply_to(message, response, parse_mode="Markdown")
@@ -268,5 +274,81 @@ def handle_send_session_zip(message):
         else:
             bot.reply_to(message, "❌ Failed to create or send session ZIP file")
             
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error: {str(e)}")
+
+# ================ PROXY MANAGEMENT COMMANDS ================
+
+@bot.message_handler(commands=['proxystats'])
+def handle_proxy_stats(message):
+    if not is_admin(message.from_user.id):
+        return
+    
+    try:
+        stats = get_proxy_stats()
+        
+        response = f"🌐 *PROXY STATISTICS* 🌐\n\n"
+        response += f"📊 **Total Proxies**: {stats['total']}\n"
+        response += f"✅ **Working Proxies**: {stats['working']}\n"
+        response += f"❌ **Failed Proxies**: {stats['failed']}\n"
+        response += f"🔄 **Current Index**: {stats['current_index']}\n\n"
+        
+        if stats['total'] == 0:
+            response += "⚠️ No proxies configured. OTP sending uses direct connection.\n"
+            response += "Add proxies using PROXYLIST environment variable."
+        elif stats['working'] == 0:
+            response += "🚨 All proxies have failed! Consider:\n"
+            response += "• Checking proxy credentials\n"
+            response += "• Using /resetproxies to reset failed list\n"
+            response += "• Adding new working proxies"
+        else:
+            percentage = (stats['working'] / stats['total']) * 100
+            response += f"📈 **Success Rate**: {percentage:.1f}%"
+        
+        bot.reply_to(message, response, parse_mode="Markdown")
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error: {str(e)}")
+
+@bot.message_handler(commands=['resetproxies'])
+def handle_reset_proxies(message):
+    if not is_admin(message.from_user.id):
+        return
+    
+    try:
+        reset_failed_proxies()
+        stats = get_proxy_stats()
+        
+        bot.reply_to(message, 
+            f"✅ *Proxy Reset Completed*\n\n"
+            f"🔄 Failed proxy list has been cleared\n"
+            f"📊 Available proxies: {stats['total']}\n"
+            f"🌐 All proxies are now available for use",
+            parse_mode="Markdown")
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error: {str(e)}")
+
+@bot.message_handler(commands=['reloadproxies'])
+def handle_reload_proxies(message):
+    if not is_admin(message.from_user.id):
+        return
+    
+    try:
+        proxy_count = reload_proxies()
+        stats = get_proxy_stats()
+        
+        response = f"🔄 *Proxy Configuration Reloaded*\n\n"
+        response += f"📊 **Loaded Proxies**: {proxy_count}\n"
+        response += f"✅ **Working Proxies**: {stats['working']}\n"
+        response += f"❌ **Failed Proxies**: {stats['failed']}\n\n"
+        
+        if proxy_count > 0:
+            response += "🌐 Proxy system is ready for OTP sending"
+        else:
+            response += "⚠️ No proxies loaded. Check PROXYLIST configuration."
+        
+        bot.reply_to(message, response, parse_mode="Markdown")
+        
     except Exception as e:
         bot.reply_to(message, f"❌ Error: {str(e)}")
