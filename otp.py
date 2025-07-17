@@ -215,34 +215,38 @@ def handle_phone_number(message):
         status, result = run_async(session_manager.start_verification(user_id, phone_number))
 
         if status == "code_sent":
-            # First send confirmation with the number
-            confirmation_msgs = {
-                'English': f"✅ *Processing Complete*\n\n📱 Number: `{phone_number}`\n📲 OTP code has been sent to your number.",
-                'Arabic': f"✅ *اكتملت المعالجة*\n\n📱 الرقم: `{phone_number}`\n📲 تم إرسال رمز OTP إلى رقمك.",
-                'Chinese': f"✅ *处理完成*\n\n📱 号码: `{phone_number}`\n📲 OTP验证码已发送到您的号码。"
+            # Edit the progress message with OTP prompt including the phone number
+            otp_prompt_msgs = {
+                'English': f"📲 Please enter the OTP you received on: `{phone_number}`\n\nReply with the 6-digit code.\nType /cancel to abort.",
+                'Arabic': f"📲 يرجى إدخال رمز OTP الذي تلقيته على: `{phone_number}`\n\nرد برمز مكون من 6 أرقام.\nاكتب /cancel للإلغاء.",
+                'Chinese': f"📲 请输入您在以下号码收到的OTP验证码: `{phone_number}`\n\n请回复6位数字验证码。\n输入 /cancel 取消。"
             }
-            bot.send_message(
-                user_id,
-                confirmation_msgs.get(lang, confirmation_msgs['English']),
-                parse_mode="Markdown"
-            )
             
-            # Then send OTP prompt
-            reply = bot.reply_to(
-                message,
-                TRANSLATIONS['otp_prompt'][lang].format(phone=phone_number),
-                parse_mode="Markdown"
-            )
-            # Delete the progress message directly
             try:
-                bot.delete_message(user_id, progress_msg.message_id)
+                reply = bot.edit_message_text(
+                    otp_prompt_msgs.get(lang, otp_prompt_msgs['English']),
+                    user_id,
+                    progress_msg.message_id,
+                    parse_mode="Markdown"
+                )
+                update_user(user_id, {
+                    "pending_phone": phone_number,
+                    "otp_msg_id": progress_msg.message_id,  # Use the edited message ID
+                    "country_code": country_code
+                })
             except Exception as e:
-                print(f"Could not delete progress message: {e}")
-            update_user(user_id, {
-                "pending_phone": phone_number,
-                "otp_msg_id": reply.message_id,
-                "country_code": country_code
-            })
+                print(f"Could not edit progress message: {e}")
+                # Fallback: send new message if edit fails
+                reply = bot.reply_to(
+                    message,
+                    otp_prompt_msgs.get(lang, otp_prompt_msgs['English']),
+                    parse_mode="Markdown"
+                )
+                update_user(user_id, {
+                    "pending_phone": phone_number,
+                    "otp_msg_id": reply.message_id,
+                    "country_code": country_code
+                })
         else:
             bot.reply_to(message, f"❌ Error: {result}")
     except Exception as e:
