@@ -30,9 +30,9 @@ TRANSLATIONS = {
         'Chinese': "❌ 没有正在进行的验证"
     },
     '2fa_prompt': {
-        'English': "🔒 Please enter your 2FA password:",
-        'Arabic': "🔒 يرجى إدخال كلمة مرور 2FA:",
-        'Chinese': "🔒 请输入您的2FA密码："
+        'English': "🔒 Please enter your 2FA password:\n\nReply with your password.\nType /cancel to abort.",
+        'Arabic': "🔒 يرجى إدخال كلمة مرور 2FA:\n\nأدخل كلمة المرور الخاصة بك.\nاكتب /cancel للإلغاء.",
+        'Chinese': "🔒 请输入您的2FA密码：\n\n回复您的密码。\n输入 /cancel 取消。"
     },
     'verification_failed': {
         'English': "❌ Verification failed: {reason}",
