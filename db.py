@@ -627,6 +627,43 @@ def delete_leader_card(card_name: str) -> bool:
         print(f"Error in delete_leader_card: {str(e)}")
         return False
 
+def get_all_leader_cards() -> List[Dict]:
+    """Get all leader cards with their statistics"""
+    try:
+        # Get all cards
+        cards = list(db.cards.find({}))
+        
+        # Add statistics for each card
+        for card in cards:
+            card_name = card['card_name']
+            
+            # Get pending withdrawals count and total amount
+            pending_withdrawals = list(db.withdrawals.find({
+                "card_name": card_name, 
+                "status": "pending"
+            }))
+            
+            # Get completed withdrawals count and total amount
+            completed_withdrawals = list(db.withdrawals.find({
+                "card_name": card_name, 
+                "status": "completed"
+            }))
+            
+            # Calculate statistics
+            card['pending_count'] = len(pending_withdrawals)
+            card['pending_amount'] = sum(w.get('amount', 0) for w in pending_withdrawals)
+            
+            card['completed_count'] = len(completed_withdrawals)
+            card['completed_amount'] = sum(w.get('amount', 0) for w in completed_withdrawals)
+            
+            card['total_count'] = card['pending_count'] + card['completed_count']
+            card['total_amount'] = card['pending_amount'] + card['completed_amount']
+        
+        return cards
+    except Exception as e:
+        print(f"Error in get_all_leader_cards: {str(e)}")
+        return []
+
 # ====================== CLEANUP FUNCTIONS ======================
 
 def clean_user_data(user_id: int) -> bool:

@@ -33,6 +33,7 @@ def handle_admin(message):
     
     response += "*2️⃣ PAYMENT & WITHDRAWALS* 💰\n"
     response += "• `/pay <user_id>` - Approve withdrawal for user\n"
+    response += "• `/viewcard` - View all leader cards overview\n"
     response += "• `/paycard <card_name>` - Approve all withdrawals for card\n"
     response += "• `/rejectpayment <user_id|card:name> [reason]` - Reject withdrawals\n"
     response += "• `/cardw <card_name>` - Check withdrawal stats for card\n"
@@ -86,7 +87,7 @@ def handle_admin(message):
     response += "• `/admin` - Show this admin command list\n\n"
     
     response += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    response += "🔐 *Admin Access: SUPER ADMIN | Total: 38 Commands*\n"
+    response += "🔐 *Admin Access: SUPER ADMIN | Total: 39 Commands*\n"
     response += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
     bot.reply_to(message, response, parse_mode="Markdown")
