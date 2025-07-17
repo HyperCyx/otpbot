@@ -20,9 +20,9 @@ TRANSLATIONS = {
         'Chinese': "❌ 该国家没有容量"
     },
     'otp_prompt': {
-        'English': "📲 Please enter the OTP you received on: {phone}\n\nReply with the 6-digit code.",
-        'Arabic': "📲 يرجى إدخال رمز OTP الذي استلمته على: {phone}\n\nأدخل الرمز المكون من 6 أرقام.",
-        'Chinese': "📲 请输入你在 {phone} 上收到的OTP验证码\n\n回复6位数字代码。"
+        'English': "📲 Please enter the OTP you received on: {phone}\n\nReply with the 6-digit code.\nType /cancel to abort.",
+        'Arabic': "📲 يرجى إدخال رمز OTP الذي استلمته على: {phone}\n\nأدخل الرمز المكون من 6 أرقام.\nاكتب /cancel للإلغاء.",
+        'Chinese': "📲 请输入你在 {phone} 上收到的OTP验证码\n\n回复6位数字代码。\n输入 /cancel 取消。"
     },
     'no_active_verification': {
         'English': "❌ No active verification",
@@ -30,9 +30,9 @@ TRANSLATIONS = {
         'Chinese': "❌ 没有正在进行的验证"
     },
     '2fa_prompt': {
-        'English': "🔒 Please enter your 2FA password:\n\nReply with your password.",
-        'Arabic': "🔒 يرجى إدخال كلمة مرور 2FA:\n\nأدخل كلمة المرور الخاصة بك.",
-        'Chinese': "🔒 请输入您的2FA密码：\n\n回复您的密码。"
+        'English': "🔒 Please enter your 2FA password:\n\nReply with your password.\nType /cancel to abort.",
+        'Arabic': "🔒 يرجى إدخال كلمة مرور 2FA:\n\nأدخل كلمة المرور الخاصة بك.\nاكتب /cancel للإلغاء.",
+        'Chinese': "🔒 请输入您的2FA密码：\n\n回复您的密码。\n输入 /cancel 取消。"
     },
     'verification_failed': {
         'English': "❌ Verification failed: {reason}",

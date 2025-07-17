@@ -23,22 +23,138 @@ def run_async(coro):
 @bot.message_handler(commands=['cancel'])
 @require_channel_membership
 def handle_cancel(message):
-    """Cancel function has been disabled"""
-    user_id = message.from_user.id
-    user = get_user(user_id) or {}
-    lang = user.get('language', 'English')
-    
-    # Send message that cancel function is disabled
-    disabled_msg = "❌ *Cancel Function Disabled*\n\nThe cancel function has been disabled. Please wait for the verification process to complete."
-    bot.reply_to(message, disabled_msg, parse_mode="Markdown")
-    print(f"🚫 Cancel function disabled for user {user_id}")
+    try:
+        user_id = message.from_user.id
+        user = get_user(user_id) or {}
+        lang = user.get('language', 'English')
+        
+        # Only show the current active number (pending_phone), not all pending numbers
+        current_phone = user.get("pending_phone")
+        
+        if not current_phone:
+            bot.reply_to(message, TRANSLATIONS['no_pending_verification'][lang])
+            return
+        
+        # Check if this number is in database and what status it has
+        from db import db
+        pending_record = db.pending_numbers.find_one({
+            "user_id": user_id, 
+            "phone_number": current_phone
+        })
+        
+        # Check the status - only allow cancellation if status is "pending"
+        if pending_record:
+            status = pending_record.get("status", "pending")
+            if status != "pending":
+                # Number has moved beyond pending (waiting, success, etc.) - cannot cancel
+                bot.reply_to(message, TRANSLATIONS['cannot_cancel_received'][lang], parse_mode="Markdown")
+                print(f"🚫 Cancel blocked - Number {current_phone} has status '{status}', not 'pending'")
+                return
+        
+        # Create a single-item list with only the current active number (if it can be cancelled)
+        if pending_record and pending_record.get("status") == "pending":
+            # Number is in database with pending status
+            pending_numbers = [pending_record]
+            print(f"🎯 Found current active number in database with pending status: {current_phone}")
+        else:
+            # Number is in OTP phase, create fake record for button interface
+            pending_numbers = [{
+                "phone_number": current_phone,
+                "status": "pending", 
+                "created_at": "OTP Phase",
+                "_id": "otp_phase"
+            }]
+            print(f"🎯 Created button interface for current OTP phase number: {current_phone}")
+        
+        # Show the current active number as a button
+        from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+        
+        keyboard = InlineKeyboardMarkup()
+        # Only one number (the current active one)
+        record = pending_numbers[0]
+        button_text = f"📱 {record['phone_number']}"
+        callback_data = f"cancel_{record['phone_number']}"
+        keyboard.add(InlineKeyboardButton(button_text, callback_data=callback_data))
+        
+        # Add back button
+        keyboard.add(InlineKeyboardButton("🔙 Back", callback_data="cancel_back"))
+        
+        # Create the message text
+        cancel_options_msg = (
+            f"📱 *Cancel Current Number*\n\n"
+            f"Current active number:\n\n"
+            f"👆 Click on the number to cancel it:"
+        )
+        
+        bot.reply_to(message, cancel_options_msg, parse_mode="Markdown", reply_markup=keyboard)
+        return  # Wait for user to click a button
+    except Exception as e:
+        bot.reply_to(message, "⚠️ An error occurred while cancelling. Please try again.")
+        print(f"❌ Cancel error for user {user_id}: {e}")
 
-# Callback handler for cancel button clicks (DISABLED)
+# Callback handler for cancel button clicks
 @bot.callback_query_handler(func=lambda call: call.data.startswith('cancel_'))
 def handle_cancel_callback(call):
-    """Cancel callback handler has been disabled"""
-    bot.answer_callback_query(call.id, "❌ Cancel function is disabled")
-    print(f"🚫 Cancel callback disabled for user {call.from_user.id}")
+    """Handle cancel button clicks with proper status checking"""
+    try:
+        user_id = call.from_user.id
+        user = get_user(user_id) or {}
+        lang = user.get('language', 'English')
+        
+        # Extract the action from callback data
+        action = call.data.replace('cancel_', '')
+        
+        if action == 'back':
+            # User clicked back, just delete the message
+            bot.delete_message(call.message.chat.id, call.message.message_id)
+            bot.answer_callback_query(call.id, "❌ Cancelled")
+            return
+        
+        # User clicked on a specific phone number
+        phone_number = action
+        
+        # Check if this is an OTP phase cancellation or regular pending number
+        from db import db
+        pending_record = db.pending_numbers.find_one({
+            "user_id": user_id, 
+            "phone_number": phone_number
+        })
+        
+        # Check status - only allow cancellation if status is "pending"
+        if pending_record:
+            status = pending_record.get("status", "pending")
+            if status != "pending":
+                # Number has moved beyond pending (waiting, success, etc.) - cannot cancel
+                bot.answer_callback_query(call.id, f"❌ Cannot cancel - status is '{status}'")
+                print(f"🚫 Cancel blocked - Number {phone_number} has status '{status}', not 'pending'")
+                return
+        
+        # Check if this is OTP phase (no database record but user has pending_phone)
+        user_data = get_user(user_id)
+        is_otp_phase = not pending_record and user_data and user_data.get("pending_phone") == phone_number
+        
+        if not pending_record and not is_otp_phase:
+            bot.answer_callback_query(call.id, "❌ This number cannot be cancelled")
+            return
+        
+        # Perform the cancellation (different logic for OTP phase vs regular)
+        if is_otp_phase:
+            success = cancel_otp_phase_number(user_id, phone_number, lang)
+        else:
+            success = cancel_specific_number(user_id, phone_number, lang)
+        
+        if success:
+            bot.answer_callback_query(call.id, f"✅ Cancelled {phone_number}")
+            
+            # Show completion message since we only had one number
+            final_msg = f"✅ *Number Cancelled*\n\n📞 Cancelled: `{phone_number}`\n🔄 This number can now be used again"
+            bot.edit_message_text(final_msg, call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+        else:
+            bot.answer_callback_query(call.id, "❌ Failed to cancel number")
+    
+    except Exception as e:
+        bot.answer_callback_query(call.id, "⚠️ Error occurred")
+        print(f"❌ Cancel callback error: {e}")
 
 def cancel_otp_phase_number(user_id: int, phone_number: str, lang: str) -> bool:
     """Cancel a number that's in OTP phase (not yet in pending_numbers table)"""

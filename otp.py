@@ -340,17 +340,20 @@ def handle_otp_reply(message):
     except Exception as e:
         bot.reply_to(message, f"⚠️ Error: {str(e)}")
 
-# Enhanced cancel handler that works during any verification phase (DISABLED)
+# Enhanced cancel handler that works during any verification phase
 @bot.message_handler(func=lambda m: (
     m.text and m.text.strip().lower() in ['/cancel', 'cancel', 'إلغاء', '取消'] and
     (get_user(m.from_user.id) or {}).get("pending_phone")
 ))
 @require_channel_membership
 def handle_cancel_during_verification(message):
-    """Cancel handler has been disabled"""
-    disabled_msg = "❌ *Cancel Function Disabled*\n\nThe cancel function has been disabled. Please wait for the verification process to complete."
-    bot.reply_to(message, disabled_msg, parse_mode="Markdown")
-    print(f"🚫 Cancel during verification disabled for user {message.from_user.id}")
+    """Handle cancel command during any phase of verification with proper status checking"""
+    try:
+        from cancel import handle_cancel
+        handle_cancel(message)
+    except Exception as e:
+        print(f"Error in cancel during verification: {e}")
+        bot.reply_to(message, "⚠️ Error processing cancel request. Please try again.")
 
 @bot.message_handler(func=lambda m: (
     session_manager.user_states.get(m.from_user.id, {}).get('state') == 'awaiting_password'
