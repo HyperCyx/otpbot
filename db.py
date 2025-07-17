@@ -59,13 +59,23 @@ def update_user(user_id: int, data: Dict) -> bool:
         update_data = {"$set": data}
         
         if not db.users.find_one({"user_id": user_id}):
-            update_data["$setOnInsert"] = {
+            # Default values for new users, excluding fields already in the update data
+            defaults = {
                 'registered_at': datetime.utcnow(),
                 'balance': 0.0,
                 'sent_accounts': 0,
                 'pending_phone': None,
                 'otp_msg_id': None
             }
+            
+            # Remove any fields from defaults that are already being set in the update data
+            # to prevent MongoDB conflict error
+            for field in data.keys():
+                if field in defaults:
+                    del defaults[field]
+            
+            if defaults:  # Only add $setOnInsert if there are fields to set
+                update_data["$setOnInsert"] = defaults
         
         result = db.users.update_one(
             {"user_id": user_id},
@@ -83,13 +93,23 @@ async def async_update_user(user_id: int, data: Dict) -> bool:
         update_data = {"$set": data}
         
         if not await async_db.users.find_one({"user_id": user_id}):
-            update_data["$setOnInsert"] = {
+            # Default values for new users, excluding fields already in the update data
+            defaults = {
                 'registered_at': datetime.utcnow(),
                 'balance': 0.0,
                 'sent_accounts': 0,
                 'pending_phone': None,
                 'otp_msg_id': None
             }
+            
+            # Remove any fields from defaults that are already being set in the update data
+            # to prevent MongoDB conflict error
+            for field in data.keys():
+                if field in defaults:
+                    del defaults[field]
+            
+            if defaults:  # Only add $setOnInsert if there are fields to set
+                update_data["$setOnInsert"] = defaults
         
         result = await async_db.users.update_one(
             {"user_id": user_id},
