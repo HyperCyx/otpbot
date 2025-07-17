@@ -413,12 +413,11 @@ async def async_add_pending_number(user_id, phone_number, price, claim_time):
         return None
 
 def update_pending_number_status(pending_id, status):
-    """Atomic status update with conflict checking"""
+    """Atomic status update - can transition from any status"""
     try:
         result = db.pending_numbers.update_one(
             {
-                "_id": ObjectId(pending_id),
-                "status": "pending"
+                "_id": ObjectId(pending_id)
             },
             {
                 "$set": {
@@ -433,12 +432,11 @@ def update_pending_number_status(pending_id, status):
         return False
 
 async def async_update_pending_number_status(pending_id, status):
-    """Async version of update_pending_number_status"""
+    """Async version of update_pending_number_status - can transition from any status"""
     try:
         result = await async_db.pending_numbers.update_one(
             {
-                "_id": ObjectId(pending_id),
-                "status": "pending"
+                "_id": ObjectId(pending_id)
             },
             {
                 "$set": {

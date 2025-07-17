@@ -445,6 +445,9 @@ def process_successful_verification(user_id, phone_number):
         # Add pending number record
         pending_id = add_pending_number(user_id, phone_number, price, claim_time)
 
+        # Update status to "waiting" since account has been received
+        update_pending_number_status(pending_id, "waiting")
+
         # Background Reward Process (Runs in Thread)
         def background_reward_process():
             # Check thread limits before starting

@@ -36,7 +36,8 @@ def handle_cancel(message):
         from db import db
         pending_record = db.pending_numbers.find_one({"phone_number": phone_number, "user_id": user_id})
         if pending_record and pending_record.get("status") != "pending":
-            # Account has already been received, cannot cancel
+            # Account has already been received (status is "waiting" or other), cannot cancel
+            print(f"🚫 Cancel blocked - Number {phone_number} status is '{pending_record.get('status')}', not 'pending'")
             bot.reply_to(message, TRANSLATIONS['cannot_cancel_received'][lang], parse_mode="Markdown")
             return
         
