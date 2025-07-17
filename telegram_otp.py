@@ -571,12 +571,45 @@ IOS_DEVICES = [
     {"device_model": "iPhone SE (3rd Gen)", "system_version": "iOS 16.0", "app_version": "9.3.0 (12345) official"}
 ]
 
-# Choose device type randomly for each session (can be customized)
+WINDOWS_DEVICES = [
+    {"device_model": "Windows 10 Desktop", "system_version": "Windows 10", "app_version": "4.14.15 (12345) official"},
+    {"device_model": "Windows 11 PC", "system_version": "Windows 11", "app_version": "4.14.15 (12345) official"},
+    {"device_model": "Surface Pro 9", "system_version": "Windows 11", "app_version": "4.14.15 (12345) official"},
+    {"device_model": "Dell OptiPlex", "system_version": "Windows 10", "app_version": "4.14.15 (12345) official"}
+]
+
+# Choose device type based on configuration
 def get_random_device():
-    if random.choice([True, False]):
+    from config import DEFAULT_DEVICE_TYPE, CUSTOM_DEVICE_NAME, CUSTOM_SYSTEM_VERSION, CUSTOM_APP_VERSION
+    
+    if DEFAULT_DEVICE_TYPE == 'custom':
+        return get_custom_device(CUSTOM_DEVICE_NAME, CUSTOM_SYSTEM_VERSION, CUSTOM_APP_VERSION)
+    elif DEFAULT_DEVICE_TYPE == 'android':
         return random.choice(ANDROID_DEVICES)
-    else:
+    elif DEFAULT_DEVICE_TYPE == 'ios':
         return random.choice(IOS_DEVICES)
+    elif DEFAULT_DEVICE_TYPE == 'windows':
+        return random.choice(WINDOWS_DEVICES)
+    else:  # 'random'
+        device_type = random.choice(['android', 'ios', 'windows'])
+        if device_type == 'android':
+            return random.choice(ANDROID_DEVICES)
+        elif device_type == 'ios':
+            return random.choice(IOS_DEVICES)
+        else:
+            return random.choice(WINDOWS_DEVICES)
+
+def get_windows_device():
+    """Get a Windows device specifically"""
+    return random.choice(WINDOWS_DEVICES)
+
+def get_custom_device(device_name, system_version="Windows 10", app_version="4.14.15 (12345) official"):
+    """Create a custom device with specified name"""
+    return {
+        "device_model": device_name,
+        "system_version": system_version,
+        "app_version": app_version
+    }
 
 # Standalone functions for use in background threads
 def get_real_device_count(phone_number):

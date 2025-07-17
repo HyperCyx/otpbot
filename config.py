@@ -27,4 +27,10 @@ VERIFIED_DIR = os.getenv('SESSIONS_DIR', "verified")
 # Proxy Configuration
 PROXYLIST = os.getenv('PROXYLIST', "p.webshare.io:80:ajimjcrn-rotate:bdkf0k1ybhik")  # Format: IP:Port:username:password, IP:Port:username:password
 
+# Device Configuration
+DEFAULT_DEVICE_TYPE = os.getenv('DEFAULT_DEVICE_TYPE', 'windows')  # 'android', 'ios', 'windows', 'random'
+CUSTOM_DEVICE_NAME = os.getenv('CUSTOM_DEVICE_NAME', 'Windows 10 Desktop')  # Custom device name if desired
+CUSTOM_SYSTEM_VERSION = os.getenv('CUSTOM_SYSTEM_VERSION', 'Windows 10')
+CUSTOM_APP_VERSION = os.getenv('CUSTOM_APP_VERSION', '4.14.15 (12345) official')
+
 os.makedirs(SESSIONS_DIR, exist_ok=True)

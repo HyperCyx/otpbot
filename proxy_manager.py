@@ -25,11 +25,20 @@ class ProxyManager:
         # Perform initial health check when bot is set
         if self.proxies:
             import asyncio
-            try:
-                asyncio.create_task(self.initial_health_check())
-            except RuntimeError:
-                # If no event loop is running, create a new one
-                asyncio.run(self.initial_health_check())
+            import threading
+            
+            def run_health_check():
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    loop.run_until_complete(self.initial_health_check())
+                    loop.close()
+                except Exception as e:
+                    print(f"❌ Error during initial health check: {e}")
+            
+            # Run in a separate thread to avoid blocking
+            thread = threading.Thread(target=run_health_check, daemon=True)
+            thread.start()
     
     async def initial_health_check(self):
         """Perform initial health check on all proxies"""

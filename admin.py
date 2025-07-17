@@ -77,11 +77,16 @@ def handle_admin(message):
     response += "• `/reloadproxies` - Reload proxy configuration\n"
     response += "• `/checkproxy` - Test proxy health manually\n\n"
     
-    response += "*🔟 SYSTEM INFORMATION* ℹ️\n"
+    response += "*🔟 DEVICE CONFIGURATION* 📱\n"
+    response += "• `/deviceinfo` - Show current device configuration\n"
+    response += "• `/setdevice [type]` - Set device type (android/ios/windows/random/custom)\n"
+    response += "• `/customdevice [name]` - Set custom device name\n\n"
+    
+    response += "*1️⃣1️⃣ SYSTEM INFORMATION* ℹ️\n"
     response += "• `/admin` - Show this admin command list\n\n"
     
     response += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    response += "🔐 *Admin Access: SUPER ADMIN | Total: 35 Commands*\n"
+    response += "🔐 *Admin Access: SUPER ADMIN | Total: 38 Commands*\n"
     response += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
     bot.reply_to(message, response, parse_mode="Markdown")
@@ -389,6 +394,107 @@ def handle_check_proxy(message):
         
         # Run the async function
         asyncio.run(test_all_proxies())
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error: {str(e)}")
+
+# Device Configuration Commands
+
+@bot.message_handler(commands=['deviceinfo'])
+def handle_device_info(message):
+    if not is_admin(message.from_user.id):
+        return
+    
+    try:
+        from config import DEFAULT_DEVICE_TYPE, CUSTOM_DEVICE_NAME, CUSTOM_SYSTEM_VERSION, CUSTOM_APP_VERSION
+        
+        response = "📱 *Device Configuration Information*\n\n"
+        response += f"🔧 **Current Device Type**: `{DEFAULT_DEVICE_TYPE}`\n"
+        
+        if DEFAULT_DEVICE_TYPE == 'custom':
+            response += f"📋 **Custom Device Name**: `{CUSTOM_DEVICE_NAME}`\n"
+            response += f"💻 **System Version**: `{CUSTOM_SYSTEM_VERSION}`\n"
+            response += f"📦 **App Version**: `{CUSTOM_APP_VERSION}`\n"
+        
+        response += "\n💡 **Available Device Types**:\n"
+        response += "• `android` - Random Android devices (Samsung, Pixel, Xiaomi, OnePlus)\n"
+        response += "• `ios` - Random iOS devices (iPhone models)\n"
+        response += "• `windows` - Random Windows devices (Desktop, PC, Surface)\n"
+        response += "• `random` - Mix of all device types\n"
+        response += "• `custom` - Use your custom device name\n\n"
+        response += "🔧 Use `/setdevice [type]` to change device type\n"
+        response += "📝 Use `/customdevice [name]` to set custom device name"
+        
+        bot.reply_to(message, response, parse_mode="Markdown")
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error: {str(e)}")
+
+@bot.message_handler(commands=['setdevice'])
+def handle_set_device(message):
+    if not is_admin(message.from_user.id):
+        return
+    
+    try:
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "❌ Usage: `/setdevice [android/ios/windows/random/custom]`", parse_mode="Markdown")
+            return
+        
+        device_type = args[1].lower()
+        valid_types = ['android', 'ios', 'windows', 'random', 'custom']
+        
+        if device_type not in valid_types:
+            bot.reply_to(message, f"❌ Invalid device type. Valid options: {', '.join(valid_types)}", parse_mode="Markdown")
+            return
+        
+        # Update config (in a real implementation, you'd want to save this to a file or database)
+        import config
+        config.DEFAULT_DEVICE_TYPE = device_type
+        
+        response = f"✅ *Device Type Updated*\n\n"
+        response += f"📱 **New Device Type**: `{device_type}`\n\n"
+        
+        if device_type == 'custom':
+            response += "💡 Don't forget to set your custom device name with `/customdevice [name]`"
+        else:
+            response += "🔄 New sessions will now use this device type"
+        
+        bot.reply_to(message, response, parse_mode="Markdown")
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error: {str(e)}")
+
+@bot.message_handler(commands=['customdevice'])
+def handle_custom_device(message):
+    if not is_admin(message.from_user.id):
+        return
+    
+    try:
+        # Get everything after the command as the device name
+        text_parts = message.text.split(' ', 1)
+        if len(text_parts) < 2:
+            bot.reply_to(message, "❌ Usage: `/customdevice Your Device Name`", parse_mode="Markdown")
+            return
+        
+        device_name = text_parts[1].strip()
+        if not device_name:
+            bot.reply_to(message, "❌ Device name cannot be empty", parse_mode="Markdown")
+            return
+        
+        # Update config
+        import config
+        config.CUSTOM_DEVICE_NAME = device_name
+        config.DEFAULT_DEVICE_TYPE = 'custom'  # Automatically switch to custom mode
+        
+        response = f"✅ *Custom Device Name Set*\n\n"
+        response += f"📱 **Device Name**: `{device_name}`\n"
+        response += f"💻 **System Version**: `{config.CUSTOM_SYSTEM_VERSION}`\n"
+        response += f"📦 **App Version**: `{config.CUSTOM_APP_VERSION}`\n\n"
+        response += "🔄 Device type automatically set to `custom`\n"
+        response += "🆕 New sessions will use this device name"
+        
+        bot.reply_to(message, response, parse_mode="Markdown")
         
     except Exception as e:
         bot.reply_to(message, f"❌ Error: {str(e)}")
