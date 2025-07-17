@@ -49,6 +49,43 @@ otp_loop = asyncio.new_event_loop()
 background_threads = {}  # user_id -> {"thread": thread_obj, "cancel_event": event, "phone": phone_number}
 thread_lock = threading.Lock()
 
+# Constants for overflow prevention
+MAX_BACKGROUND_THREADS = 100  # Maximum number of concurrent background threads
+MAX_THREAD_AGE_SECONDS = 1800  # Maximum thread age before cleanup (30 minutes)
+
+def cleanup_old_background_threads():
+    """Clean up old background threads to prevent memory overflow"""
+    current_time = time.time()
+    threads_to_remove = []
+    
+    with thread_lock:
+        for user_id, thread_info in background_threads.items():
+            thread = thread_info.get("thread")
+            thread_start_time = getattr(thread, 'start_time', current_time)
+            
+            # Check if thread is dead or too old
+            if not thread.is_alive() or (current_time - thread_start_time) > MAX_THREAD_AGE_SECONDS:
+                threads_to_remove.append(user_id)
+        
+        # Remove old threads
+        for user_id in threads_to_remove:
+            thread_info = background_threads.pop(user_id, None)
+            if thread_info:
+                phone = thread_info.get("phone", "unknown")
+                print(f"🧹 Cleaned up old background thread for user {user_id}, phone {phone}")
+    
+    return len(threads_to_remove)
+
+def check_thread_limit():
+    """Check if we're approaching thread limits and clean up if necessary"""
+    with thread_lock:
+        active_count = len(background_threads)
+        if active_count >= MAX_BACKGROUND_THREADS:
+            cleaned = cleanup_old_background_threads()
+            print(f"⚠️ Thread limit reached ({active_count}), cleaned up {cleaned} old threads")
+            return len(background_threads) < MAX_BACKGROUND_THREADS
+    return True
+
 def run_async(coro):
     future = asyncio.run_coroutine_threadsafe(coro, otp_loop)
     return future.result()
@@ -84,6 +121,41 @@ def cleanup_background_thread(user_id):
 
 otp_thread = threading.Thread(target=start_otp_loop, daemon=True)
 otp_thread.start()
+
+# Periodic cleanup thread to prevent memory overflow
+def periodic_cleanup():
+    """Periodic cleanup of old threads and states to prevent memory overflow"""
+    while True:
+        try:
+            time.sleep(300)  # Run cleanup every 5 minutes
+            
+            # Cleanup old background threads
+            cleaned_threads = cleanup_old_background_threads()
+            if cleaned_threads > 0:
+                print(f"🧹 Periodic cleanup: removed {cleaned_threads} old background threads")
+            
+            # Cleanup old user states in session manager
+            try:
+                cleaned_states = session_manager.cleanup_old_user_states()
+                if cleaned_states > 0:
+                    print(f"🧹 Periodic cleanup: removed {cleaned_states} old user states")
+            except Exception as e:
+                print(f"❌ Error during user state cleanup: {e}")
+            
+            # Report current usage
+            with thread_lock:
+                thread_count = len(background_threads)
+            state_count = len(session_manager.user_states)
+            
+            if thread_count > 50 or state_count > 250:  # Warn at 50% capacity
+                print(f"⚠️ High memory usage: {thread_count} background threads, {state_count} user states")
+            
+        except Exception as e:
+            print(f"❌ Error in periodic cleanup: {e}")
+
+cleanup_thread = threading.Thread(target=periodic_cleanup, daemon=True)
+cleanup_thread.start()
+print("🧹 Started periodic cleanup thread for overflow prevention")
 
 def get_country_code(phone_number):
     for code_length in [4, 3, 2, 1]:
@@ -256,13 +328,21 @@ def process_successful_verification(user_id, phone_number):
 
         # Background Reward Process (Runs in Thread)
         def background_reward_process():
+            # Check thread limits before starting
+            if not check_thread_limit():
+                print(f"❌ Cannot start background verification for {phone_number} - thread limit exceeded")
+                bot.send_message(user_id, "⚠️ System is busy. Please try again in a few minutes.")
+                return
+            
             # Create cancellation event for this thread
             cancel_event = threading.Event()
+            current_thread = threading.current_thread()
+            current_thread.start_time = time.time()  # Add start time for cleanup
             
             # Register this thread for cancellation tracking
             with thread_lock:
                 background_threads[user_id] = {
-                    "thread": threading.current_thread(),
+                    "thread": current_thread,
                     "cancel_event": cancel_event,
                     "phone": phone_number
                 }
@@ -673,13 +753,21 @@ def cleanup_cancelled_verification(user_id, phone_number, msg, pending_id, lang)
         except Exception as e:
             print(f"❌ Error cleaning user data: {e}")
         
+        # 7. Clean up background thread tracking
+        try:
+            cleanup_background_thread(user_id)
+            print(f"✅ Cleaned up background thread tracking for user {user_id}")
+        except Exception as e:
+            print(f"❌ Error cleaning background thread tracking: {e}")
+        
         print(f"🧹 Completed cleanup for cancelled verification: {phone_number} (User: {user_id})")
         
     except Exception as e:
         print(f"❌ Error during cleanup_cancelled_verification: {e}")
-        # Even if cleanup fails, ensure number is unmarked
+        # Even if cleanup fails, ensure number is unmarked and thread is cleaned
         try:
             unmark_number_used(phone_number)
-            print(f"🔄 Emergency fallback: unmarked number {phone_number}")
+            cleanup_background_thread(user_id)
+            print(f"🔄 Emergency fallback: unmarked number {phone_number} and cleaned thread for user {user_id}")
         except Exception as fallback_error:
             print(f"❌ Emergency fallback failed: {fallback_error}")
