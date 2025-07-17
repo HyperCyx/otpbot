@@ -132,13 +132,16 @@ def delete_user(user_id: int) -> bool:
 
 # ==================== WITHDRAWAL MANAGEMENT ====================
 
-def log_withdrawal(user_id: int, amount: float, card_name: Optional[str] = None, status: str = "pending") -> Optional[str]:
+def log_withdrawal(user_id: int, amount: float, destination: Optional[str] = None, status: str = "pending", withdrawal_type: str = "leader_card") -> Optional[str]:
     """Log a withdrawal request and return withdrawal ID"""
     try:
         withdrawal = {
             "user_id": user_id,
             "amount": amount,
-            "card_name": card_name,
+            "destination": destination,  # Can be card_name or binance_id
+            "card_name": destination if withdrawal_type == "leader_card" else None,  # For backwards compatibility
+            "binance_id": destination if withdrawal_type == "binance" else None,
+            "withdrawal_type": withdrawal_type,  # "leader_card" or "binance"
             "status": status,
             "timestamp": datetime.utcnow()
         }
