@@ -27,59 +27,55 @@ def handle_cancel(message):
         user_id = message.from_user.id
         user = get_user(user_id) or {}
         lang = user.get('language', 'English')
-        # Find all pending numbers for this user (with status "pending")
+        # Only show the current active number (pending_phone), not all pending numbers
+        current_phone = user.get("pending_phone")
+        
+        if not current_phone:
+            bot.reply_to(message, TRANSLATIONS['no_pending_verification'][lang])
+            return
+        
+        # Check if this number is in database (post-OTP) or just in user record (OTP phase)
         from db import db
-        pending_numbers = list(db.pending_numbers.find(
-            {"user_id": user_id, "status": "pending"}
-        ).sort("created_at", -1))  # Most recent first
+        pending_record = db.pending_numbers.find_one({
+            "user_id": user_id, 
+            "phone_number": current_phone, 
+            "status": "pending"
+        })
         
-        # If no pending numbers in database, check if user has pending_phone (OTP phase)
-        if not pending_numbers:
-            if user.get("pending_phone"):
-                # User is in OTP phase, create a fake pending_numbers list for button interface
-                phone_number = user["pending_phone"]
-                print(f"🎯 No pending numbers in database, but user has pending_phone: {phone_number} (OTP phase)")
-                
-                # Create a fake record to show in button interface
-                pending_numbers = [{
-                    "phone_number": phone_number,
-                    "status": "pending",
-                    "created_at": "OTP Phase",
-                    "_id": "otp_phase"
-                }]
-                print(f"🎯 Created OTP phase button interface for {phone_number}")
-            else:
-                bot.reply_to(message, TRANSLATIONS['no_pending_verification'][lang])
-                return
+        # Create a single-item list with only the current active number
+        if pending_record:
+            # Number is in database (post-OTP phase)
+            pending_numbers = [pending_record]
+            print(f"🎯 Found current active number in database: {current_phone}")
+        else:
+            # Number is in OTP phase, create fake record for button interface
+            pending_numbers = [{
+                "phone_number": current_phone,
+                "status": "pending", 
+                "created_at": "OTP Phase",
+                "_id": "otp_phase"
+            }]
+            print(f"🎯 Created button interface for current OTP phase number: {current_phone}")
         
-        # Always show numbers as buttons (even single numbers)
+        # Show the current active number as a button
         from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
         
         keyboard = InlineKeyboardMarkup()
-        for record in pending_numbers:
-            # Create button with phone number and callback data
-            button_text = f"📱 {record['phone_number']}"
-            callback_data = f"cancel_{record['phone_number']}"
-            keyboard.add(InlineKeyboardButton(button_text, callback_data=callback_data))
+        # Only one number (the current active one)
+        record = pending_numbers[0]
+        button_text = f"📱 {record['phone_number']}"
+        callback_data = f"cancel_{record['phone_number']}"
+        keyboard.add(InlineKeyboardButton(button_text, callback_data=callback_data))
         
-        # Add utility buttons
-        if len(pending_numbers) > 1:
-            keyboard.add(InlineKeyboardButton("❌ Cancel All Numbers", callback_data="cancel_all"))
+        # Add back button
         keyboard.add(InlineKeyboardButton("🔙 Back", callback_data="cancel_back"))
         
         # Create the message text
-        if len(pending_numbers) == 1:
-            cancel_options_msg = (
-                f"📱 *Select Number to Cancel*\n\n"
-                f"You have 1 number that can be cancelled:\n\n"
-                f"👆 Click on the number to cancel it:"
-            )
-        else:
-            cancel_options_msg = (
-                f"📱 *Select Number to Cancel*\n\n"
-                f"You have {len(pending_numbers)} numbers that can be cancelled:\n\n"
-                f"👆 Click on the number you want to cancel:"
-            )
+        cancel_options_msg = (
+            f"📱 *Cancel Current Number*\n\n"
+            f"Current active number:\n\n"
+            f"👆 Click on the number to cancel it:"
+        )
         
         bot.reply_to(message, cancel_options_msg, parse_mode="Markdown", reply_markup=keyboard)
         return  # Wait for user to click a button
@@ -105,39 +101,7 @@ def handle_cancel_callback(call):
             bot.answer_callback_query(call.id, "❌ Cancelled")
             return
         
-        elif action == 'all':
-            # User wants to cancel all numbers
-            from db import db
-            pending_numbers = list(db.pending_numbers.find(
-                {"user_id": user_id, "status": "pending"}
-            ))
-            
-            if not pending_numbers:
-                bot.answer_callback_query(call.id, "❌ No pending numbers found")
-                return
-            
-            cancelled_count = 0
-            cancelled_numbers = []
-            
-            for record in pending_numbers:
-                phone_number = record["phone_number"]
-                try:
-                    # Perform cancellation for each number
-                    success = cancel_specific_number(user_id, phone_number, lang)
-                    if success:
-                        cancelled_count += 1
-                        cancelled_numbers.append(phone_number)
-                except Exception as e:
-                    print(f"Error cancelling {phone_number}: {e}")
-            
-            # Update the message with results
-            if cancelled_count > 0:
-                result_msg = f"✅ *Cancelled {cancelled_count} Numbers*\n\n" + "\n".join([f"📞 `{num}`" for num in cancelled_numbers])
-                bot.edit_message_text(result_msg, call.message.chat.id, call.message.message_id, parse_mode="Markdown")
-                bot.answer_callback_query(call.id, f"✅ Cancelled {cancelled_count} numbers")
-            else:
-                bot.answer_callback_query(call.id, "❌ No numbers could be cancelled")
-            
+
         else:
             # User clicked on a specific phone number
             phone_number = action
@@ -167,62 +131,9 @@ def handle_cancel_callback(call):
             if success:
                 bot.answer_callback_query(call.id, f"✅ Cancelled {phone_number}")
                 
-                # Get updated list of pending numbers
-                remaining_numbers = list(db.pending_numbers.find(
-                    {"user_id": user_id, "status": "pending"}
-                ).sort("created_at", -1))
-                
-                # Check if user still has pending_phone (OTP phase) after cancellation
-                updated_user = get_user(user_id)
-                has_otp_phase = updated_user and updated_user.get("pending_phone")
-                
-                # Add OTP phase number to remaining list if it exists
-                if has_otp_phase and not is_otp_phase:  # Only add if we didn't just cancel the OTP phase
-                    remaining_numbers.append({
-                        "phone_number": updated_user["pending_phone"],
-                        "status": "pending",
-                        "created_at": "OTP Phase",
-                        "_id": "otp_phase"
-                    })
-                
-                if remaining_numbers:
-                    # Update the button list with remaining numbers
-                    from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-                    
-                    keyboard = InlineKeyboardMarkup()
-                    for record in remaining_numbers:
-                        button_text = f"📱 {record['phone_number']}"
-                        callback_data = f"cancel_{record['phone_number']}"
-                        keyboard.add(InlineKeyboardButton(button_text, callback_data=callback_data))
-                    
-                    # Add utility buttons
-                    if len(remaining_numbers) > 1:
-                        keyboard.add(InlineKeyboardButton("❌ Cancel All Numbers", callback_data="cancel_all"))
-                    keyboard.add(InlineKeyboardButton("🔙 Back", callback_data="cancel_back"))
-                    
-                    # Create updated message
-                    cancelled_msg = f"✅ *Cancelled:* `{phone_number}`\n\n"
-                    if len(remaining_numbers) == 1:
-                        updated_msg = (
-                            cancelled_msg +
-                            f"📱 *Select Number to Cancel*\n\n"
-                            f"You have 1 number remaining that can be cancelled:\n\n"
-                            f"👆 Click on the number to cancel it:"
-                        )
-                    else:
-                        updated_msg = (
-                            cancelled_msg +
-                            f"📱 *Select Number to Cancel*\n\n"
-                            f"You have {len(remaining_numbers)} numbers remaining that can be cancelled:\n\n"
-                            f"👆 Click on the number you want to cancel:"
-                        )
-                    
-                    bot.edit_message_text(updated_msg, call.message.chat.id, call.message.message_id, 
-                                        parse_mode="Markdown", reply_markup=keyboard)
-                else:
-                    # No more numbers, show completion message
-                    final_msg = f"✅ *All Numbers Cancelled*\n\n📞 Last cancelled: `{phone_number}`\n🔄 All numbers can now be used again"
-                    bot.edit_message_text(final_msg, call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+                # Show completion message since we only had one number
+                final_msg = f"✅ *Number Cancelled*\n\n📞 Cancelled: `{phone_number}`\n🔄 This number can now be used again"
+                bot.edit_message_text(final_msg, call.message.chat.id, call.message.message_id, parse_mode="Markdown")
             else:
                 bot.answer_callback_query(call.id, "❌ Failed to cancel number")
     
