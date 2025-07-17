@@ -86,26 +86,36 @@ def handle_cancel(message):
                 bot.reply_to(message, TRANSLATIONS['no_pending_verification'][lang])
                 return
         
-        # If user has multiple pending numbers, show them and ask which to cancel
-        if len(pending_numbers) > 1:
-            numbers_list = []
-            for i, record in enumerate(pending_numbers, 1):
-                numbers_list.append(f"{i}. `{record['phone_number']}` - {record.get('created_at', 'Unknown time')}")
+        # Show all pending numbers as buttons for user to choose
+        if len(pending_numbers) == 1:
+            # Only one number, proceed directly
+            most_recent = pending_numbers[0]
+            phone_number = most_recent["phone_number"]
+            pending_id = str(most_recent["_id"])
+            print(f"🎯 Found 1 pending number for user {user_id}: {phone_number}")
+        else:
+            # Multiple numbers, show as buttons
+            from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+            
+            keyboard = InlineKeyboardMarkup()
+            for record in pending_numbers:
+                # Create button with phone number and callback data
+                button_text = f"📱 {record['phone_number']}"
+                callback_data = f"cancel_{record['phone_number']}"
+                keyboard.add(InlineKeyboardButton(button_text, callback_data=callback_data))
+            
+            # Add a "Cancel All" option
+            keyboard.add(InlineKeyboardButton("❌ Cancel All Numbers", callback_data="cancel_all"))
+            keyboard.add(InlineKeyboardButton("🔙 Back", callback_data="cancel_back"))
             
             cancel_options_msg = (
-                f"📱 *Multiple Numbers Found*\n\n"
-                f"You have {len(pending_numbers)} numbers that can be cancelled:\n\n" +
-                "\n".join(numbers_list) + "\n\n"
-                f"💡 Cancelling the most recent number: `{pending_numbers[0]['phone_number']}`"
+                f"📱 *Select Number to Cancel*\n\n"
+                f"You have {len(pending_numbers)} numbers that can be cancelled:\n\n"
+                f"👆 Click on the number you want to cancel:"
             )
-            bot.reply_to(message, cancel_options_msg, parse_mode="Markdown")
-        
-        # Use the most recent pending number (first in the sorted list)
-        most_recent = pending_numbers[0]
-        phone_number = most_recent["phone_number"]
-        pending_id = str(most_recent["_id"])
-        
-        print(f"🎯 Found {len(pending_numbers)} pending numbers for user {user_id}, cancelling most recent: {phone_number}")
+            
+            bot.reply_to(message, cancel_options_msg, parse_mode="Markdown", reply_markup=keyboard)
+            return  # Wait for user to click a button
         
         # Since we already filtered by status "pending", we know this number can be cancelled
         # But let's double-check the current status in case it changed
@@ -193,3 +203,148 @@ def handle_cancel(message):
     except Exception as e:
         bot.reply_to(message, "⚠️ An error occurred while cancelling. Please try again.")
         print(f"❌ Cancel error for user {user_id}: {e}")
+
+# Callback handler for cancel button clicks
+@bot.callback_query_handler(func=lambda call: call.data.startswith('cancel_'))
+def handle_cancel_callback(call):
+    """Handle cancel button clicks"""
+    try:
+        user_id = call.from_user.id
+        user = get_user(user_id) or {}
+        lang = user.get('language', 'English')
+        
+        # Extract the action from callback data
+        action = call.data.replace('cancel_', '')
+        
+        if action == 'back':
+            # User clicked back, just delete the message
+            bot.delete_message(call.message.chat.id, call.message.message_id)
+            bot.answer_callback_query(call.id, "❌ Cancelled")
+            return
+        
+        elif action == 'all':
+            # User wants to cancel all numbers
+            from db import db
+            pending_numbers = list(db.pending_numbers.find(
+                {"user_id": user_id, "status": "pending"}
+            ))
+            
+            if not pending_numbers:
+                bot.answer_callback_query(call.id, "❌ No pending numbers found")
+                return
+            
+            cancelled_count = 0
+            cancelled_numbers = []
+            
+            for record in pending_numbers:
+                phone_number = record["phone_number"]
+                try:
+                    # Perform cancellation for each number
+                    success = cancel_specific_number(user_id, phone_number, lang)
+                    if success:
+                        cancelled_count += 1
+                        cancelled_numbers.append(phone_number)
+                except Exception as e:
+                    print(f"Error cancelling {phone_number}: {e}")
+            
+            # Update the message with results
+            if cancelled_count > 0:
+                result_msg = f"✅ *Cancelled {cancelled_count} Numbers*\n\n" + "\n".join([f"📞 `{num}`" for num in cancelled_numbers])
+                bot.edit_message_text(result_msg, call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+                bot.answer_callback_query(call.id, f"✅ Cancelled {cancelled_count} numbers")
+            else:
+                bot.answer_callback_query(call.id, "❌ No numbers could be cancelled")
+            
+        else:
+            # User clicked on a specific phone number
+            phone_number = action
+            
+            # Verify this number belongs to the user and can be cancelled
+            from db import db
+            pending_record = db.pending_numbers.find_one({
+                "user_id": user_id, 
+                "phone_number": phone_number, 
+                "status": "pending"
+            })
+            
+            if not pending_record:
+                bot.answer_callback_query(call.id, "❌ This number cannot be cancelled")
+                return
+            
+            # Perform the cancellation
+            success = cancel_specific_number(user_id, phone_number, lang)
+            
+            if success:
+                # Update the message to show cancellation result
+                result_msg = f"✅ *Number Cancelled*\n\n📞 `{phone_number}`\n🔄 This number can now be used again"
+                bot.edit_message_text(result_msg, call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+                bot.answer_callback_query(call.id, f"✅ Cancelled {phone_number}")
+            else:
+                bot.answer_callback_query(call.id, "❌ Failed to cancel number")
+    
+    except Exception as e:
+        bot.answer_callback_query(call.id, "⚠️ Error occurred")
+        print(f"❌ Cancel callback error: {e}")
+
+def cancel_specific_number(user_id: int, phone_number: str, lang: str) -> bool:
+    """Cancel a specific number for a user"""
+    try:
+        print(f"🗑️ Cancelling verification for {phone_number} (User: {user_id})")
+        
+        # Cancel background verification
+        from otp import cancel_background_verification
+        background_cancelled, background_phone = cancel_background_verification(user_id)
+        if background_cancelled:
+            print(f"🛑 Background verification cancelled for {background_phone}")
+            import time
+            time.sleep(1)
+        
+        # Remove from used numbers
+        unmark_success = unmark_number_used(phone_number)
+        if unmark_success:
+            print(f"✅ Number {phone_number} unmarked (can be used again)")
+        
+        # Clean up session files
+        session_info = session_manager.get_session_info(phone_number)
+        session_path = session_info["session_path"]
+        temp_session_path = session_manager.user_states.get(user_id, {}).get("session_path")
+        
+        for path in [session_path, temp_session_path]:
+            try:
+                if path and os.path.exists(path):
+                    os.remove(path)
+                    print(f"✅ Removed session file: {path}")
+            except Exception as e:
+                print(f"Error removing session file {path}: {e}")
+        
+        # Clean up session manager state
+        cleanup_success = run_async(session_manager.cleanup_session(user_id))
+        
+        # Delete specific pending number
+        deleted_pending = delete_specific_pending_number(user_id, phone_number)
+        if deleted_pending:
+            print(f"✅ Deleted pending number record for {phone_number}")
+        
+        # Update user data if this was the current pending_phone
+        current_user = get_user(user_id)
+        if current_user and current_user.get("pending_phone") == phone_number:
+            # Find other pending numbers to set as new pending_phone
+            from db import db
+            remaining_pending = list(db.pending_numbers.find(
+                {"user_id": user_id, "status": "pending", "phone_number": {"$ne": phone_number}}
+            ).sort("created_at", -1))
+            
+            new_pending_phone = remaining_pending[0]["phone_number"] if remaining_pending else None
+            
+            update_user(user_id, {
+                "pending_phone": new_pending_phone,
+                "otp_msg_id": None if not new_pending_phone else current_user.get("otp_msg_id"),
+                "country_code": None if not new_pending_phone else current_user.get("country_code")
+            })
+        
+        print(f"✅ Successfully cancelled verification for {phone_number}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error cancelling {phone_number}: {e}")
+        return False
