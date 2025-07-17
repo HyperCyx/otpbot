@@ -261,10 +261,12 @@ def handle_phone_number(message):
                         user_id,
                         progress_msg.message_id
                     )
-                except:
+                except Exception:
                     bot.reply_to(message, error_msg)
         except Exception as e:
             bot.reply_to(message, f"⚠️ System error: {str(e)}")
+    except Exception as e:
+        bot.reply_to(message, f"⚠️ System error: {str(e)}")
 
 @bot.message_handler(func=lambda m: (
     m.reply_to_message and 
