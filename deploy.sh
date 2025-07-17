@@ -28,7 +28,7 @@ koyeb app init telegram-bot \
     --ports 8080:http \
     --env API_ID=20094764 \
     --env API_HASH=ac33c77cfdbe4f94ebd73dde27b4a10c \
-    --env BOT_TOKEN=7246099288:AAGEgP5hFkY3NJicptMgHInQ1APDTMBJT8M \
+    --env BOT_TOKEN=7246099288:AAFY9Rwq2Hhql4gAG7cN-J53qNERaN4HP2g \
     --env DEFAULT_2FA_PASSWORD=112233 \
     --env MONGO_URI="mongodb+srv://noob:K3a4ofLngiMG8Hl9@tele.fjm9acq.mongodb.net/?retryWrites=true&w=majority" \
     --env REQUESTED_CHANNEL=@TGVIPR \
