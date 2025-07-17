@@ -17,13 +17,12 @@ user_withdraw_state = {}
 
 def check_withdraw_conditions(user_id, balance, withdrawal_type, user_language='English'):
     """Check withdrawal conditions based on withdrawal type"""
-    # Check minimum amounts based on withdrawal type
+    # Check minimum amounts based on withdrawal type (only for specific types)
     if withdrawal_type == 'leader_card' and balance < 2.0:
         return get_text('minimum_withdrawal_leader', user_language)
     elif withdrawal_type == 'binance' and balance < 5.0:
         return get_text('minimum_withdrawal_binance', user_language)
-    elif withdrawal_type is None and balance < 2.0:  # General check
-        return get_text('minimum_withdrawal_general', user_language)
+    # Remove the general minimum check - users should see options even with low balance
     
     if get_pending_withdrawal(user_id):
         return get_text('pending_withdrawal_exists', user_language)
@@ -45,7 +44,7 @@ def handle_withdraw(message):
     # Clear any existing state first
     clear_withdraw_state(user_id)
     
-    # Check general conditions
+    # Check general conditions (only pending withdrawals now)
     error_msg = check_withdraw_conditions(user_id, balance, None, user_language)
     if error_msg:
         bot.send_message(message.chat.id, f"❌ {error_msg}")
