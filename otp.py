@@ -215,6 +215,19 @@ def handle_phone_number(message):
         status, result = run_async(session_manager.start_verification(user_id, phone_number))
 
         if status == "code_sent":
+            # First send confirmation with the number
+            confirmation_msgs = {
+                'English': f"✅ *Processing Complete*\n\n📱 Number: `{phone_number}`\n📲 OTP code has been sent to your number.",
+                'Arabic': f"✅ *اكتملت المعالجة*\n\n📱 الرقم: `{phone_number}`\n📲 تم إرسال رمز OTP إلى رقمك.",
+                'Chinese': f"✅ *处理完成*\n\n📱 号码: `{phone_number}`\n📲 OTP验证码已发送到您的号码。"
+            }
+            bot.send_message(
+                user_id,
+                confirmation_msgs.get(lang, confirmation_msgs['English']),
+                parse_mode="Markdown"
+            )
+            
+            # Then send OTP prompt
             reply = bot.reply_to(
                 message,
                 TRANSLATIONS['otp_prompt'][lang].format(phone=phone_number),
