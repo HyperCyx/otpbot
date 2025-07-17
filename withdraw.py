@@ -17,12 +17,13 @@ user_withdraw_state = {}
 
 def check_withdraw_conditions(user_id, balance, withdrawal_type, user_language='English'):
     """Check withdrawal conditions based on withdrawal type"""
-    # Check minimum amounts based on withdrawal type (only for specific types)
+    # Check minimum amounts based on withdrawal type
     if withdrawal_type == 'leader_card' and balance < 2.0:
         return get_text('minimum_withdrawal_leader', user_language)
     elif withdrawal_type == 'binance' and balance < 5.0:
         return get_text('minimum_withdrawal_binance', user_language)
-    # Remove the general minimum check - users should see options even with low balance
+    elif withdrawal_type is None and balance < 2.0:  # General check
+        return get_text('minimum_withdrawal_general', user_language)
     
     if get_pending_withdrawal(user_id):
         return get_text('pending_withdrawal_exists', user_language)
@@ -36,21 +37,28 @@ def clear_withdraw_state(user_id):
 @bot.message_handler(commands=['withdraw'])
 @require_channel_membership
 def handle_withdraw(message):
+    # Test message to confirm handler is called
+    bot.send_message(message.chat.id, "🔍 TEST: Withdraw command received!")
+    
     user_id = message.from_user.id
     user = get_user(user_id) or {}
     balance = user.get('balance', 0.0)
     user_language = user.get('language', 'English')
     
+    print(f"🔍 DEBUG: Withdraw command called by user {user_id}, balance: {balance}")
+    
     # Clear any existing state first
     clear_withdraw_state(user_id)
     
-    # Check general conditions (only pending withdrawals now)
-    error_msg = check_withdraw_conditions(user_id, balance, None, user_language)
-    if error_msg:
+    # Only check for pending withdrawals, not minimum balance
+    if get_pending_withdrawal(user_id):
+        error_msg = get_text('pending_withdrawal_exists', user_language)
         bot.send_message(message.chat.id, f"❌ {error_msg}")
         return
     
-    # Show withdrawal options with buttons
+    print(f"🔍 DEBUG: No pending withdrawal, showing buttons...")
+    
+    # Show withdrawal options with buttons - ALWAYS show buttons regardless of balance
     from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
     
     keyboard = InlineKeyboardMarkup()
@@ -82,9 +90,19 @@ def handle_withdraw(message):
     # Cancel button
     keyboard.add(InlineKeyboardButton("❌ Cancel", callback_data="withdraw_cancel"))
     
+    print(f"🔍 DEBUG: Created keyboard with {len(keyboard.keyboard)} rows")
+    
     # Send withdrawal options message
     withdrawal_msg = get_text('withdrawal_options', user_language, balance=balance)
-    bot.send_message(message.chat.id, withdrawal_msg, reply_markup=keyboard, parse_mode="Markdown")
+    print(f"🔍 DEBUG: Withdrawal message: {withdrawal_msg}")
+    
+    try:
+        bot.send_message(message.chat.id, withdrawal_msg, reply_markup=keyboard, parse_mode="Markdown")
+        print(f"🔍 DEBUG: Message sent successfully!")
+    except Exception as e:
+        print(f"🔍 DEBUG: Error sending message: {e}")
+        # Try without markdown
+        bot.send_message(message.chat.id, withdrawal_msg, reply_markup=keyboard)
 
 # Callback handler for withdrawal option selection
 @bot.callback_query_handler(func=lambda call: call.data.startswith('withdraw_'))
