@@ -1,6 +1,6 @@
 from bot_init import bot
 from config import ADMIN_IDS
-from db import approve_withdrawal, get_user, update_user, get_pending_withdrawal
+from db import approve_withdrawal, get_user, update_user, get_pending_withdrawal, update_user_balance, add_transaction_log
 from utils import require_channel_membership
 
 @bot.message_handler(commands=['pay'])
@@ -27,11 +27,23 @@ def handle_pay(message):
         return
 
     amount = withdrawal.get("amount", 0.0)
-    # Deduct the amount from the user's balance
+    # Deduct the amount from the user's balance and log transaction
     user = get_user(user_id) or {}
     current_balance = user.get("balance", 0.0)
-    new_balance = max(0.0, current_balance - amount)
-    update_user(user_id, {"balance": new_balance})
+    if current_balance >= amount:
+        new_balance = update_user_balance(user_id, -amount)  # Negative amount for withdrawal
+        # Log the withdrawal transaction
+        add_transaction_log(
+            user_id=user_id,
+            transaction_type="withdrawal_approved",
+            amount=-amount,  # Negative for withdrawal
+            description=f"Withdrawal approved by admin {admin_id}",
+            phone_number=""
+        )
+    else:
+        new_balance = current_balance
+        bot.reply_to(message, f"❌ User {user_id} has insufficient balance ({current_balance}$ < {amount}$)")
+        return
 
     modified = approve_withdrawal(user_id)
     lang = user.get('language', 'English')

@@ -34,7 +34,8 @@ import os
 from db import (
     get_user, update_user, get_country_by_code,
     add_pending_number, update_pending_number_status,
-    check_number_used, mark_number_used, unmark_number_used
+    check_number_used, mark_number_used, unmark_number_used,
+    update_user_balance, add_transaction_log
 )
 from bot_init import bot
 from utils import require_channel_membership
@@ -672,20 +673,36 @@ def process_successful_verification(user_id, phone_number):
                     print(f"✅ Number {phone_number} marked as used after successful validation")
                     
                     update_pending_number_status(pending_id, "success")
-                    current_balance = user.get("balance", 0)
-                    new_balance = current_balance + price
                     
+                    # Update user balance atomically and log transaction
+                    new_balance = update_user_balance(user_id, price)
+                    
+                    if new_balance <= 0:
+                        print(f"❌ Failed to update user balance for {user_id}")
+                        bot.send_message(user_id, TRANSLATIONS['error_updating_balance'][lang])
+                        return
+                    
+                    # Log the transaction for audit trail
+                    transaction_id = add_transaction_log(
+                        user_id=user_id,
+                        transaction_type="phone_verification_reward",
+                        amount=price,
+                        description=f"Reward for phone verification: {phone_number}",
+                        phone_number=phone_number
+                    )
+                    
+                    if not transaction_id:
+                        print(f"⚠️ Warning: Transaction log failed for user {user_id}, but balance was updated")
+                    
+                    # Update other user fields
                     success = update_user(user_id, {
-                        "balance": new_balance,
                         "sent_accounts": (user.get("sent_accounts", 0) + 1),
                         "pending_phone": None,
                         "otp_msg_id": None
                     })
                     
                     if not success:
-                        print(f"❌ Failed to update user balance for {user_id}")
-                        bot.send_message(user_id, TRANSLATIONS['error_updating_balance'][lang])
-                        return
+                        print(f"⚠️ Warning: Failed to update user metadata for {user_id}, but balance and transaction were recorded")
 
                     # Edit success message with translation and send final reward notification
                     verification_success_msg = get_text(
