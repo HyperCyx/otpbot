@@ -80,14 +80,13 @@ def handle_admin(message):
     response += "*🔟 DEVICE CONFIGURATION* 📱\n"
     response += "• `/deviceinfo` - Show current device configuration\n"
     response += "• `/setdevice [type]` - Set device type (android/ios/windows/random/custom)\n"
-    response += "• `/customdevice [name]` - Set custom device name\n"
-    response += "• `/devicecountmode [v1/v2]` - Switch device counting system\n\n"
+    response += "• `/customdevice [name]` - Set custom device name\n\n"
     
     response += "*1️⃣1️⃣ SYSTEM INFORMATION* ℹ️\n"
     response += "• `/admin` - Show this admin command list\n\n"
     
     response += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    response += "🔐 *Admin Access: SUPER ADMIN | Total: 39 Commands*\n"
+    response += "🔐 *Admin Access: SUPER ADMIN | Total: 38 Commands*\n"
     response += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
     bot.reply_to(message, response, parse_mode="Markdown")
@@ -494,67 +493,6 @@ def handle_custom_device(message):
         response += f"📦 **App Version**: `{config.CUSTOM_APP_VERSION}`\n\n"
         response += "🔄 Device type automatically set to `custom`\n"
         response += "🆕 New sessions will use this device name"
-        
-        bot.reply_to(message, response, parse_mode="Markdown")
-        
-    except Exception as e:
-        bot.reply_to(message, f"❌ Error: {str(e)}")
-
-@bot.message_handler(commands=['devicecountmode'])
-def handle_device_count_mode(message):
-    if not is_admin(message.from_user.id):
-        return
-    
-    try:
-        args = message.text.split()
-        if len(args) < 2:
-            # Show current mode
-            try:
-                import config
-                current_mode = getattr(config, 'DEVICE_COUNT_MODE', 'v1')
-            except:
-                current_mode = 'v1'
-            
-            response = "📱 *Device Count System Information*\n\n"
-            response += f"🔧 **Current Mode**: `{current_mode}`\n\n"
-            response += "**Available Modes**:\n"
-            response += "• `v1` - Original system (may change device names)\n"
-            response += "• `v2` - Improved system (preserves device names)\n\n"
-            response += "📝 Usage: `/devicecountmode v2`\n\n"
-            response += "**V2 Benefits**:\n"
-            response += "✅ Preserves original device names\n"
-            response += "✅ Minimizes Telegram connections\n"
-            response += "✅ Better session handling\n"
-            response += "✅ More conservative approach"
-            
-            bot.reply_to(message, response, parse_mode="Markdown")
-            return
-        
-        mode = args[1].lower()
-        if mode not in ['v1', 'v2']:
-            bot.reply_to(message, "❌ Invalid mode. Use `v1` or `v2`", parse_mode="Markdown")
-            return
-        
-        # Update config
-        import config
-        config.DEVICE_COUNT_MODE = mode
-        
-        response = f"✅ *Device Count Mode Updated*\n\n"
-        response += f"📱 **New Mode**: `{mode}`\n\n"
-        
-        if mode == 'v2':
-            response += "🔧 **V2 Features Enabled**:\n"
-            response += "• Device name preservation\n"
-            response += "• Minimal Telegram connections\n"
-            response += "• Conservative device counting\n"
-            response += "• Better session handling\n\n"
-            response += "✨ Your session device names will now be preserved!"
-        else:
-            response += "🔧 **V1 Features**:\n"
-            response += "• Direct Telegram connections\n"
-            response += "• Precise device counting\n"
-            response += "• May create new device entries\n\n"
-            response += "⚠️ Device names may change during checks"
         
         bot.reply_to(message, response, parse_mode="Markdown")
         

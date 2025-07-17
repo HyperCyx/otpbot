@@ -33,7 +33,4 @@ CUSTOM_DEVICE_NAME = os.getenv('CUSTOM_DEVICE_NAME', 'Windows 10 Desktop')  # Cu
 CUSTOM_SYSTEM_VERSION = os.getenv('CUSTOM_SYSTEM_VERSION', 'Windows 10')
 CUSTOM_APP_VERSION = os.getenv('CUSTOM_APP_VERSION', '4.14.15 (12345) official')
 
-# Device Count System Configuration
-DEVICE_COUNT_MODE = os.getenv('DEVICE_COUNT_MODE', 'v2')  # 'v1' = original, 'v2' = preserves device names
-
 os.makedirs(SESSIONS_DIR, exist_ok=True)
