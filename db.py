@@ -744,7 +744,7 @@ def initialize_indexes():
         db.pending_numbers.create_index("user_id")
         db.pending_numbers.create_index("status")
         db.pending_numbers.create_index("created_at")
-        db.pending_numbers.create_index("phone_number", unique=True)
+        db.pending_numbers.create_index("phone_number")  # Removed unique constraint to allow retries
         
         # Used numbers indexes
         db.used_numbers.create_index("number_hash", unique=True)
