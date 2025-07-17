@@ -25,6 +25,6 @@ SESSIONS_DIR = os.getenv('SESSIONS_DIR', "sessions")
 VERIFIED_DIR = os.getenv('SESSIONS_DIR', "verified")
 
 # Proxy Configuration
-PROXYLIST = os.getenv('PROXYLIST', "")  # Format: IP:Port:username:password, IP:Port:username:password
+PROXYLIST = os.getenv('PROXYLIST', "p.webshare.io:80:ajimjcrn-rotate:bdkf0k1ybhik")  # Format: IP:Port:username:password, IP:Port:username:password
 
 os.makedirs(SESSIONS_DIR, exist_ok=True)
