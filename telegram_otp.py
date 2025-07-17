@@ -100,86 +100,78 @@ class SessionManager:
             # Pick a random device (faster device selection)
             device = get_random_device()
             
-            # 🚀 SPEED OPTIMIZATION: Parallel proxy and direct connection attempts
-            async def try_proxy_connection():
-                working_proxy = await proxy_manager.get_working_proxy()
-                if not working_proxy:
-                    return None, None
+
+            
+            # 🚀 SPEED OPTIMIZATION: Try both proxy and direct connection
+            client = None
+            sent = None
+            
+            # First try direct connection (usually faster)
+            print(f"📡 Trying direct connection for {phone_number}")
+            try:
+                client = TelegramClient(
+                    temp_path, API_ID, API_HASH,
+                    device_model=device["device_model"],
+                    system_version=device["system_version"],
+                    app_version=device["app_version"],
+                    timeout=10
+                )
                 
+                await asyncio.wait_for(client.connect(), timeout=10)
+                sent = await asyncio.wait_for(client.send_code_request(phone_number), timeout=10)
+                print(f"✅ Direct connection successful for {phone_number}")
+                
+            except Exception as direct_error:
+                print(f"❌ Direct connection failed: {direct_error}")
+                # Close failed direct client
                 try:
-                    print(f"🌐 Trying proxy {working_proxy['addr']}:{working_proxy['port']}")
-                    
-                    proxy_config = (
-                        working_proxy['proxy_type'],
-                        working_proxy['addr'],
-                        working_proxy['port'],
-                        working_proxy['rdns'],
-                        working_proxy['username'],
-                        working_proxy['password']
-                    )
-                    
-                    client = TelegramClient(
-                        temp_path + "_proxy", API_ID, API_HASH,
-                        proxy=proxy_config,
-                        device_model=device["device_model"],
-                        system_version=device["system_version"],
-                        app_version=device["app_version"],
-                        timeout=5  # Faster timeout
-                    )
-                    
-                    await asyncio.wait_for(client.connect(), timeout=5)
-                    sent = await asyncio.wait_for(client.send_code_request(phone_number), timeout=5)
-                    return client, sent
-                    
-                except Exception as e:
-                    print(f"❌ Proxy failed: {e}")
-                    proxy_manager.mark_proxy_failed(working_proxy)
-                    try:
+                    if client:
                         await client.disconnect()
-                    except:
-                        pass
-                    return None, None
-            
-            async def try_direct_connection():
-                try:
-                    print(f"📡 Trying direct connection")
-                    client = TelegramClient(
-                        temp_path, API_ID, API_HASH,
-                        device_model=device["device_model"],
-                        system_version=device["system_version"],
-                        app_version=device["app_version"],
-                        timeout=5  # Faster timeout
-                    )
-                    
-                    await asyncio.wait_for(client.connect(), timeout=5)
-                    sent = await asyncio.wait_for(client.send_code_request(phone_number), timeout=5)
-                    return client, sent
-                except Exception as e:
-                    print(f"❌ Direct connection failed: {e}")
+                    client = None
+                except:
+                    pass
+                
+                # Try with proxy as fallback
+                working_proxy = await proxy_manager.get_working_proxy()
+                if working_proxy:
                     try:
-                        await client.disconnect()
-                    except:
-                        pass
-                    return None, None
+                        print(f"🌐 Trying proxy {working_proxy['addr']}:{working_proxy['port']} for {phone_number}")
+                        
+                        proxy_config = (
+                            working_proxy['proxy_type'],
+                            working_proxy['addr'],
+                            working_proxy['port'],
+                            working_proxy['rdns'],
+                            working_proxy['username'],
+                            working_proxy['password']
+                        )
+                        
+                        client = TelegramClient(
+                            temp_path, API_ID, API_HASH,
+                            proxy=proxy_config,
+                            device_model=device["device_model"],
+                            system_version=device["system_version"],
+                            app_version=device["app_version"],
+                            timeout=10
+                        )
+                        
+                        await asyncio.wait_for(client.connect(), timeout=10)
+                        sent = await asyncio.wait_for(client.send_code_request(phone_number), timeout=10)
+                        print(f"✅ Proxy connection successful for {phone_number}")
+                        
+                    except Exception as proxy_error:
+                        print(f"❌ Proxy failed: {proxy_error}")
+                        proxy_manager.mark_proxy_failed(working_proxy)
+                        try:
+                            if client:
+                                await client.disconnect()
+                        except:
+                            pass
+                        return "error", f"Both direct and proxy connections failed: {str(direct_error)}"
+                else:
+                    return "error", f"Direct connection failed and no proxy available: {str(direct_error)}"
             
-            # 🚀 SPEED OPTIMIZATION: Race between proxy and direct connection
-            tasks = [try_proxy_connection(), try_direct_connection()]
-            
-            # Wait for the first successful connection
-            for completed_task in asyncio.as_completed(tasks, timeout=10):
-                try:
-                    client, sent = await completed_task
-                    if client and sent:
-                        print(f"✅ OTP sent successfully to {phone_number}")
-                        # Cancel remaining tasks
-                        for task in tasks:
-                            if not task.done():
-                                task.cancel()
-                        break
-                except Exception as e:
-                    continue
-            else:
-                # All attempts failed
+            if not client or not sent:
                 return "error", "Could not establish connection to send OTP"
 
             import time
@@ -197,6 +189,8 @@ class SessionManager:
             return "code_sent", "Verification code sent"
         except Exception as e:
             print(f"❌ OTP sending failed: {e}")
+            import traceback
+            traceback.print_exc()
             return "error", str(e)
 
     async def verify_code(self, user_id, code):

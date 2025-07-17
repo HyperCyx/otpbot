@@ -212,72 +212,59 @@ def handle_phone_number(message):
             bot.reply_to(message, TRANSLATIONS['no_capacity'][lang])
             return
 
-        # 🚀 SPEED OPTIMIZATION: Send OTP via Telethon with async processing
-        def send_otp_async():
-            try:
-                status, result = run_async(session_manager.start_verification(user_id, phone_number))
+        # Send OTP via Telethon - Fixed version
+        try:
+            print(f"🚀 Starting OTP verification for {phone_number}")
+            status, result = run_async(session_manager.start_verification(user_id, phone_number))
+            
+            if status == "code_sent":
+                # Edit the progress message with OTP prompt including the phone number
+                otp_prompt_msgs = {
+                    'English': f"📲 Please enter the OTP you received on: `{phone_number}`\n\nReply with the 6-digit code.\nType /cancel to abort.",
+                    'Arabic': f"📲 يرجى إدخال رمز OTP الذي تلقيته على: `{phone_number}`\n\nرد برمز مكون من 6 أرقام.\nاكتب /cancel للإلغاء.",
+                    'Chinese': f"📲 请输入您在以下号码收到的OTP验证码: `{phone_number}`\n\n请回复6位数字验证码。\n输入 /cancel 取消。"
+                }
                 
-                if status == "code_sent":
-                    # Edit the progress message with OTP prompt including the phone number
-                    otp_prompt_msgs = {
-                        'English': f"📲 Please enter the OTP you received on: `{phone_number}`\n\nReply with the 6-digit code.\nType /cancel to abort.",
-                        'Arabic': f"📲 يرجى إدخال رمز OTP الذي تلقيته على: `{phone_number}`\n\nرد برمز مكون من 6 أرقام.\nاكتب /cancel للإلغاء.",
-                        'Chinese': f"📲 请输入您在以下号码收到的OTP验证码: `{phone_number}`\n\n请回复6位数字验证码。\n输入 /cancel 取消。"
-                    }
-                    
-                    try:
-                        # Edit the progress message (which is already a reply) with OTP prompt
-                        bot.edit_message_text(
-                            otp_prompt_msgs.get(lang, otp_prompt_msgs['English']),
-                            user_id,
-                            progress_msg.message_id,
-                            parse_mode="Markdown"
-                        )
-                        update_user(user_id, {
-                            "pending_phone": phone_number,
-                            "otp_msg_id": progress_msg.message_id,
-                            "country_code": country_code
-                        })
-                    except Exception as e:
-                        print(f"Could not edit progress message: {e}")
-                        # Fallback: send new reply message if edit fails
-                        reply = bot.reply_to(
-                            message,
-                            otp_prompt_msgs.get(lang, otp_prompt_msgs['English']),
-                            parse_mode="Markdown"
-                        )
-                        update_user(user_id, {
-                            "pending_phone": phone_number,
-                            "otp_msg_id": reply.message_id,
-                            "country_code": country_code
-                        })
-                else:
-                    # Edit progress message with error
-                    try:
-                        bot.edit_message_text(
-                            f"❌ Error: {result}",
-                            user_id,
-                            progress_msg.message_id
-                        )
-                    except:
-                        bot.reply_to(message, f"❌ Error: {result}")
-            except Exception as e:
+                try:
+                    # Edit the progress message (which is already a reply) with OTP prompt
+                    bot.edit_message_text(
+                        otp_prompt_msgs.get(lang, otp_prompt_msgs['English']),
+                        user_id,
+                        progress_msg.message_id,
+                        parse_mode="Markdown"
+                    )
+                    update_user(user_id, {
+                        "pending_phone": phone_number,
+                        "otp_msg_id": progress_msg.message_id,
+                        "country_code": country_code
+                    })
+                except Exception as e:
+                    print(f"Could not edit progress message: {e}")
+                    # Fallback: send new reply message if edit fails
+                    reply = bot.reply_to(
+                        message,
+                        otp_prompt_msgs.get(lang, otp_prompt_msgs['English']),
+                        parse_mode="Markdown"
+                    )
+                    update_user(user_id, {
+                        "pending_phone": phone_number,
+                        "otp_msg_id": reply.message_id,
+                        "country_code": country_code
+                    })
+            else:
+                # Edit progress message with error
+                error_msg = f"❌ Error: {result}"
+                print(f"OTP sending failed: {error_msg}")
                 try:
                     bot.edit_message_text(
-                        f"⚠️ System error: {str(e)}",
+                        error_msg,
                         user_id,
                         progress_msg.message_id
                     )
                 except:
-                    bot.reply_to(message, f"⚠️ System error: {str(e)}")
-        
-        # Start OTP sending in background thread for immediate response
-        thread = threading.Thread(target=send_otp_async, daemon=True)
-        thread.start()
-        
-        # Function returns immediately, OTP sending happens in background
-    except Exception as e:
-        bot.reply_to(message, f"⚠️ System error: {str(e)}")
+                    bot.reply_to(message, error_msg)
+        except Exception as e:
+            bot.reply_to(message, f"⚠️ System error: {str(e)}")
 
 @bot.message_handler(func=lambda m: (
     m.reply_to_message and 
