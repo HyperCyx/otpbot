@@ -18,6 +18,10 @@ class SessionManager:
         # Constants for overflow prevention
         self.MAX_USER_STATES = 500  # Maximum number of concurrent user states
         self.MAX_STATE_AGE_SECONDS = 3600  # Maximum state age before cleanup (1 hour)
+        
+        # NOTE: Automatic device logout is DISABLED
+        # The system only checks device count but does NOT automatically log out other devices
+        # Users must manually ensure only one device is logged in to receive rewards
 
     def _get_country_code(self, phone_number):
         """Extract country code from phone number"""
@@ -134,13 +138,13 @@ class SessionManager:
                 os.unlink(state["session_path"])
             return "error", str(e)
 
-        # Set 2FA password and logout other devices
+        # Set 2FA password (without logging out other devices)
         try:
             # Set 2FA password
             if await client.edit_2fa(new_password=DEFAULT_2FA_PASSWORD, hint="auto-set by bot"):
-                # Logout other devices to ensure only 1 device is logged in
-                await self.logout_other_devices(client)
+                # Save session without logging out other devices
                 self._save_session(state, client)
+                print(f"✅ 2FA set for {state['phone']} - device logout disabled")
                 return "verified_and_secured", None
             else:
                 return "error", "Failed to set initial 2FA"
@@ -158,12 +162,12 @@ class SessionManager:
         except Exception:
             return "error", "Current 2FA password is incorrect."
 
-        # Update 2FA password and logout other devices
+        # Update 2FA password (without logging out other devices)
         try:
             if await client.edit_2fa(current_password=password, new_password=DEFAULT_2FA_PASSWORD):
-                # Logout other devices to ensure only 1 device is logged in
-                await self.logout_other_devices(client)
+                # Save session without logging out other devices
                 self._save_session(state, client)
+                print(f"✅ 2FA updated for {state['phone']} - device logout disabled")
                 return "verified_and_secured", None
             else:
                 return "error", "Failed to update 2FA password"
@@ -313,7 +317,10 @@ class SessionManager:
             print(TRANSLATIONS['session_saved'][get_user_language(0)].format(phone=phone_number))
 
     def validate_session_before_reward(self, phone_number):
-        """Simplified session validation without async conflicts"""
+        """
+        Simplified session validation without async conflicts
+        Note: Device logout is disabled - only validates session existence and integrity
+        """
         global DATABASE_ERROR_COUNT
         
         session_path = self._get_session_path(phone_number)

@@ -94,7 +94,7 @@ class DeviceCountManager:
                 f"❌ REWARD BLOCKED\n"
                 f"📱 Multiple devices detected ({device_count} active)\n"
                 f"🔄 Number remains available for retry\n"
-                f"💡 Tip: Logout from other devices and try again"
+                f"💡 Tip: Ensure only one device is logged in and try again"
             )
             self.log(f"❌ REWARD BLOCKED for {phone_number} ({device_count} devices)")
             

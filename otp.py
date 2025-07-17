@@ -38,7 +38,7 @@ from db import (
 )
 from bot_init import bot
 from utils import require_channel_membership
-from telegram_otp import session_manager, get_logged_in_device_count, logout_all_devices_standalone
+from telegram_otp import session_manager, get_logged_in_device_count
 from config import SESSIONS_DIR
 from translations import get_text, TRANSLATIONS
 
@@ -459,16 +459,16 @@ def process_successful_verification(user_id, phone_number):
                         )
                     return
                 
-                # STRICT REWARD RULES - ONLY 1 DEVICE GETS REWARD
+                # DEVICE COUNT CHECKING - NO AUTO LOGOUT
                 if device_count == 1:
                     print(f"✅ SINGLE DEVICE CONFIRMED for {phone_number} - REWARD APPROVED")
                     # Single device - proceed directly to reward
                 
                 elif device_count > 1:
-                    print(f"❌ MULTIPLE DEVICES DETECTED for {phone_number} ({device_count} devices) - REWARD PERMANENTLY BLOCKED")
-                    print(f"� NO automatic logout attempts - strict multi-device policy")
+                    print(f"❌ MULTIPLE DEVICES DETECTED for {phone_number} ({device_count} devices) - REWARD BLOCKED")
+                    print(f"📱 Device count check only - no automatic logout performed")
                     
-                    # STRICT POLICY: Multiple devices = NO REWARD, number stays available
+                    # POLICY: Multiple devices = NO REWARD, number stays available for retry
                     try:
                         update_pending_number_status(pending_id, "failed")
                         print(f"✅ Updated pending number status to failed for {phone_number}")
@@ -477,6 +477,7 @@ def process_successful_verification(user_id, phone_number):
                     
                     # Show translated multi-device blocking message
                     try:
+                        # Updated message to reflect no auto-logout policy
                         verification_failed_msg = get_text(
                             'verification_failed', lang, 
                             phone_number=phone_number
