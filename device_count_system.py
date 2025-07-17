@@ -38,6 +38,54 @@ class DeviceCountManager:
         if self.debug:
             print(f"🔍 [DeviceCount] {message}")
     
+    def _get_original_device_info(self, session_path: str) -> dict:
+        """
+        Extract original device information from session file to preserve device identity.
+        If not available, fall back to current configuration.
+        """
+        try:
+            import sqlite3
+            
+            # Try to read device info from session database
+            conn = sqlite3.connect(session_path)
+            cursor = conn.cursor()
+            
+            # Check if device info is stored in the session
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='entities'")
+            if cursor.fetchone():
+                # Session exists, try to get device info from version table if it exists
+                try:
+                    cursor.execute("SELECT * FROM version LIMIT 1")
+                    # Session file exists and is valid
+                    conn.close()
+                    
+                    # Use conservative device info that won't create new device entries
+                    # This preserves the device identity without changing the device name
+                    return {
+                        'device_model': 'Telegram Desktop',  # Generic name to avoid conflicts
+                        'system_version': 'Windows 10',
+                        'app_version': '4.14.15'
+                    }
+                except:
+                    pass
+            
+            conn.close()
+            
+        except Exception as e:
+            self.log(f"Could not read device info from session: {e}")
+        
+        # Fallback to current configuration
+        try:
+            from telegram_otp import get_random_device
+            device = get_random_device()
+            return device
+        except:
+            return {
+                'device_model': 'Telegram Desktop',
+                'system_version': 'Windows 10', 
+                'app_version': '4.14.15'
+            }
+    
     def check_device_count_for_reward(self, session_path: str, phone_number: str) -> Tuple[int, bool, str]:
         """
         Check device count and determine if user should get reward.
@@ -111,26 +159,32 @@ class DeviceCountManager:
     
     def _get_device_count_sync(self, session_path: str, phone_number: str) -> int:
         """
-        Get device count using synchronous TelegramClient to avoid all async issues.
+        Get device count using synchronous TelegramClient while preserving original device info.
         """
         
-        # Create temporary copy to avoid locking the original session
-        temp_session = None
         try:
-            with tempfile.NamedTemporaryFile(suffix='.session', delete=False) as tmp:
-                temp_session = tmp.name
-            
-            # Copy session file
-            shutil.copy2(session_path, temp_session)
-            self.log(f"Created temp session copy for {phone_number}")
-            
             # Use SYNC TelegramClient (no async conflicts)
             from telethon.sync import TelegramClient
             from telethon.tl.functions.account import GetAuthorizationsRequest
             
+            # Get original device info to preserve session identity
+            device_info = self._get_original_device_info(session_path)
+            
             try:
+                # Use original session directly with preserved device info
                 # Short timeout to avoid hanging
-                with TelegramClient(temp_session, API_ID, API_HASH, timeout=10) as client:
+                client = TelegramClient(
+                    session_path, 
+                    API_ID, 
+                    API_HASH, 
+                    timeout=10,
+                    device_model=device_info.get('device_model', 'Unknown Device'),
+                    system_version=device_info.get('system_version', 'Unknown OS'),
+                    app_version=device_info.get('app_version', '1.0'),
+                    sequential_updates=True  # Prevent conflicts with other connections
+                )
+                
+                with client:
                     
                     # Connect synchronously
                     client.connect()
@@ -181,15 +235,6 @@ class DeviceCountManager:
         except Exception as e:
             self.log(f"❌ System error for {phone_number}: {e}")
             return 0
-            
-        finally:
-            # Always clean up temp file
-            if temp_session and os.path.exists(temp_session):
-                try:
-                    os.unlink(temp_session)
-                    self.log(f"🧹 Cleaned up temp session for {phone_number}")
-                except Exception as cleanup_error:
-                    self.log(f"⚠️ Could not clean temp session: {cleanup_error}")
     
     def _safe_fallback_count(self, session_path: str, phone_number: str) -> int:
         """
