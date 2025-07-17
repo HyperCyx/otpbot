@@ -42,7 +42,7 @@ def require_channel_membership(func):
                 markup = telebot.types.InlineKeyboardMarkup()
                 join_button = telebot.types.InlineKeyboardButton(
                     text="Join Now", 
-                    url="https://t.me/+AWczWKG8V6s3OGY1"
+                    url="https://t.me/+6Cw11PRcrFc1NmI1"
                 )
                 markup.add(join_button)
                 
@@ -62,7 +62,7 @@ def require_channel_membership(func):
             markup = telebot.types.InlineKeyboardMarkup()
             join_button = telebot.types.InlineKeyboardButton(
                 text="Join Now", 
-                url="https://t.me/+AWczWKG8V6s3OGY1"
+                url="https://t.me/+6Cw11PRcrFc1NmI1"
             )
             markup.add(join_button)
             
