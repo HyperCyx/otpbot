@@ -459,6 +459,15 @@ def delete_pending_numbers(user_id: int) -> int:
         print(f"Error in delete_pending_numbers: {str(e)}")
         return 0
 
+def delete_specific_pending_number(user_id: int, phone_number: str) -> bool:
+    """Delete a specific pending number for a user"""
+    try:
+        result = db.pending_numbers.delete_one({"user_id": user_id, "phone_number": phone_number})
+        return result.deleted_count > 0
+    except Exception as e:
+        print(f"Error in delete_specific_pending_number: {str(e)}")
+        return False
+
 def check_number_used(phone_number: str) -> bool:
     """Check if phone number was already used with hashing"""
     try:

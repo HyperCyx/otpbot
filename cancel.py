@@ -1,7 +1,7 @@
 import os
 import asyncio
 import threading
-from db import get_user, update_user, unmark_number_used, delete_pending_numbers
+from db import get_user, update_user, unmark_number_used, delete_specific_pending_number
 from utils import require_channel_membership
 from bot_init import bot
 from telegram_otp import session_manager
@@ -80,16 +80,23 @@ def handle_cancel(message):
                 print(f"Error removing legacy session file {legacy_session_path}: {e}")
         # 3. Clean up the session manager state and disconnect client
         cleanup_success = run_async(session_manager.cleanup_session(user_id))
-        # 4. Delete any pending numbers for this user
-        deleted_pending = delete_pending_numbers(user_id)
-        if deleted_pending > 0:
-            print(f"✅ Deleted {deleted_pending} pending number records for user {user_id}")
-        # 5. Update user in database (clear all verification data)
-        update_success = update_user(user_id, {
-            "pending_phone": None,
-            "otp_msg_id": None,
-            "country_code": None
-        })
+        # 4. Delete only the specific pending number being cancelled
+        deleted_pending = delete_specific_pending_number(user_id, phone_number)
+        if deleted_pending:
+            print(f"✅ Deleted pending number record for {phone_number} (User: {user_id})")
+        else:
+            print(f"⚠️ No pending number record found for {phone_number} (User: {user_id})")
+        # 5. Update user in database (clear verification data only for this specific number)
+        current_user = get_user(user_id)
+        if current_user and current_user.get("pending_phone") == phone_number:
+            update_success = update_user(user_id, {
+                "pending_phone": None,
+                "otp_msg_id": None,
+                "country_code": None
+            })
+        else:
+            print(f"⚠️ User's pending_phone ({current_user.get('pending_phone') if current_user else 'None'}) doesn't match cancelled number ({phone_number})")
+            update_success = True  # Don't update if it's not the current pending number
         if update_success:
             print(f"✅ User {user_id} verification data cleared")
         # Send confirmation message (translated)
