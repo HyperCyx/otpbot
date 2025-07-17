@@ -84,6 +84,11 @@ TRANSLATIONS = {
         'Arabic': "❌ لا يوجد تحقق هاتف معلق لإلغائه.",
         'Chinese': "❌ 您没有待取消的手机验证。"
     },
+    'cannot_cancel_received': {
+        'English': "🚫 *Cannot Cancel*\n\n✅ Your account has already been received and is being processed.\nNumbers in this state cannot be cancelled in any way.\n\nPlease wait for the verification process to complete.",
+        'Arabic': "🚫 *لا يمكن الإلغاء*\n\n✅ تم استلام حسابك بالفعل وهو قيد المعالجة.\nالأرقام في هذه الحالة لا يمكن إلغاؤها بأي شكل من الأشكال.\n\nيرجى انتظار اكتمال عملية التحقق.",
+        'Chinese': "🚫 *无法取消*\n\n✅ 您的账户已被接收并正在处理中。\n处于此状态的号码无法以任何方式取消。\n\n请等待验证过程完成。"
+    },
     'multiple_device_login': {
         'English': "❌ Multiple device login detected. Reporting is not allowed.",
         'Arabic': "❌ تم اكتشاف تسجيل دخول من أجهزة متعددة. لا يمكن الإبلاغ.",

@@ -31,6 +31,15 @@ def handle_cancel(message):
             bot.reply_to(message, TRANSLATIONS['no_pending_verification'][lang])
             return
         phone_number = user["pending_phone"]
+        
+        # Check if account has already been received (status is no longer "pending")
+        from db import db
+        pending_record = db.pending_numbers.find_one({"phone_number": phone_number, "user_id": user_id})
+        if pending_record and pending_record.get("status") != "pending":
+            # Account has already been received, cannot cancel
+            bot.reply_to(message, TRANSLATIONS['cannot_cancel_received'][lang], parse_mode="Markdown")
+            return
+        
         print(f"🗑️ Cancelling verification for {phone_number} (User: {user_id})")
         # 0. Cancel any running background verification thread
         from otp import cancel_background_verification
