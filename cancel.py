@@ -33,9 +33,58 @@ def handle_cancel(message):
             {"user_id": user_id, "status": "pending"}
         ).sort("created_at", -1))  # Most recent first
         
+        # If no pending numbers in database, check if user has pending_phone (OTP phase)
         if not pending_numbers:
-            bot.reply_to(message, TRANSLATIONS['no_pending_verification'][lang])
-            return
+            if user.get("pending_phone"):
+                # User is in OTP phase, use the pending_phone
+                phone_number = user["pending_phone"]
+                print(f"🎯 No pending numbers in database, but user has pending_phone: {phone_number} (OTP phase)")
+                
+                # Handle OTP phase cancellation
+                print(f"🗑️ Cancelling OTP verification for {phone_number} (User: {user_id})")
+                
+                # Cancel background verification and clean up
+                from otp import cancel_background_verification
+                background_cancelled, background_phone = cancel_background_verification(user_id)
+                if background_cancelled:
+                    print(f"🛑 Background verification cancelled for {background_phone}")
+                    import time
+                    time.sleep(1)
+                
+                # Clean up session files
+                session_info = session_manager.get_session_info(phone_number)
+                session_path = session_info["session_path"]
+                temp_session_path = session_manager.user_states.get(user_id, {}).get("session_path")
+                
+                for path in [session_path, temp_session_path]:
+                    try:
+                        if path and os.path.exists(path):
+                            os.remove(path)
+                            print(f"✅ Removed session file: {path}")
+                    except Exception as e:
+                        print(f"Error removing session file {path}: {e}")
+                
+                # Clean up session manager state
+                cleanup_success = run_async(session_manager.cleanup_session(user_id))
+                
+                # Clear user data
+                update_user(user_id, {
+                    "pending_phone": None,
+                    "otp_msg_id": None,
+                    "country_code": None
+                })
+                
+                # Unmark number as used
+                unmark_number_used(phone_number)
+                
+                # Send confirmation message
+                status_msg = TRANSLATIONS['verification_cancelled'][lang].format(phone=phone_number)
+                bot.reply_to(message, status_msg, parse_mode="Markdown")
+                print(f"✅ Successfully cancelled OTP verification for {phone_number}")
+                return
+            else:
+                bot.reply_to(message, TRANSLATIONS['no_pending_verification'][lang])
+                return
         
         # If user has multiple pending numbers, show them and ask which to cancel
         if len(pending_numbers) > 1:
