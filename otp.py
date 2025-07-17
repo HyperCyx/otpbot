@@ -184,13 +184,13 @@ def handle_phone_number(message):
 
         user = get_user(user_id) or {}
         lang = user.get('language', 'English')
-        # Show progress message immediately
+        # Show progress message immediately as reply to user's number
         progress_msgs = {
             'English': '⏳ Processing your number, please wait...!',
             'Arabic': '⏳ جارٍ معالجة رقمك، يرجى الانتظار...!',
             'Chinese': '⏳ 正在处理您的号码，请稍候...!'
         }
-        progress_msg = bot.send_message(user_id, progress_msgs.get(lang, progress_msgs['English']))
+        progress_msg = bot.reply_to(message, progress_msgs.get(lang, progress_msgs['English']))
 
         # Bot checks: Valid format, country code exists, capacity, not already used
         if check_number_used(phone_number):
@@ -223,6 +223,7 @@ def handle_phone_number(message):
             }
             
             try:
+                # Edit the progress message (which is already a reply) with OTP prompt
                 reply = bot.edit_message_text(
                     otp_prompt_msgs.get(lang, otp_prompt_msgs['English']),
                     user_id,
@@ -236,7 +237,7 @@ def handle_phone_number(message):
                 })
             except Exception as e:
                 print(f"Could not edit progress message: {e}")
-                # Fallback: send new message if edit fails
+                # Fallback: send new reply message if edit fails
                 reply = bot.reply_to(
                     message,
                     otp_prompt_msgs.get(lang, otp_prompt_msgs['English']),
