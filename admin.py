@@ -16,77 +16,60 @@ def handle_admin(message):
         bot.reply_to(message, "❌ You are not authorized to use this command.")
         return
 
-    response = """🔧 *ADMIN COMMAND CENTER* 🔧
-
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃                           🛠️ ADMINISTRATION PANEL 🛠️                           ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-
-**1️⃣ COUNTRY MANAGEMENT** 🌍
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│ `/add <code> <qty> <price> <sec> [name] [flag]` - Add/update country settings  │
-│ `/countries` - List all configured countries                                   │
-│ `/cun <country_code> <quantity>` - Set country capacity (legacy)               │
-│ `/setprice <country_code> <price>` - Set country price (legacy)                │
-│ `/settime <country_code> <seconds>` - Set claim time (legacy)                  │
-│ `/numberd <country_code>` - Remove country from system                         │
-└─────────────────────────────────────────────────────────────────────────────────┘
-
-**2️⃣ PAYMENT & WITHDRAWALS** 💰
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│ `/pay <user_id>` - Approve withdrawal for specific user                        │
-│ `/paycard <card_name>` - Approve all withdrawals for a leader card             │
-│ `/rejectpayment <user_id|card:name> [reason]` - Reject withdrawals             │
-│ `/cardw <card_name>` - Check withdrawal stats for leader card                  │
-│ `/card <card_name>` - Add new leader card                                      │
-└─────────────────────────────────────────────────────────────────────────────────┘
-
-**3️⃣ USER MANAGEMENT** 👥
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│ `/userdel <user_id>` - Delete user and all their data                          │
-│ `/notice` - Send notification to all users (reply with text)                   │
-│ `/cleanusers` - Check for users who blocked the bot                            │
-│ `/removeblocked` - Remove blocked users from database                          │
-└─────────────────────────────────────────────────────────────────────────────────┘
-
-**4️⃣ SESSION MANAGEMENT** 📱
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│ `/sessions` - View session overview by country                                 │
-│ `/sessionstats` - Detailed statistics for each country                         │
-│ `/migratesessions` - Migrate legacy sessions to country folders                │
-│ `/cleanupsessions` - Remove empty country folders                              │
-│ `/exportsessions` - Export session information to JSON                         │
-└─────────────────────────────────────────────────────────────────────────────────┘
-
-**5️⃣ SESSION DOWNLOAD & EXPORT** 📥
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│ `/get +country_code [YYYYMMDD]` - Download sessions for country (zip)          │
-│ `/getall [+country_code] [YYYYMMDD]` - Download all sessions (zip)             │
-│ `/getinfo +country_code [YYYYMMDD]` - Get detailed session info                │
-└─────────────────────────────────────────────────────────────────────────────────┘
-
-**6️⃣ SESSION CLEANUP** 🧹
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│ `/deletesessions +country_code [YYYYMMDD]` - Delete sessions for country       │
-│ `/cleansessionsall` - Delete all session files (global cleanup)               │
-└─────────────────────────────────────────────────────────────────────────────────┘
-
-**7️⃣ DEVICE MONITORING** 📊
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│ `/checkdevices +number` - Check device count for phone number                  │
-│ `/testdevicereward +number` - Test reward eligibility                          │
-│ `/devicestatus` - Show device security status report                           │
-│ `/testfailmessage <language> +number` - Test failure messages                  │
-└─────────────────────────────────────────────────────────────────────────────────┘
-
-**8️⃣ SYSTEM INFORMATION** ℹ️
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│ `/admin` - Show this admin command list                                        │
-└─────────────────────────────────────────────────────────────────────────────────┘
-
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ 🔐 Admin Access Level: **SUPER ADMIN** | Total Commands: **29**               ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"""
+    response = "🔧 *ADMIN COMMAND CENTER* 🔧\n\n"
+    response += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    response += "🛠️ *ADMINISTRATION PANEL* 🛠️\n"
+    response += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    
+    response += "*1️⃣ COUNTRY MANAGEMENT* 🌍\n"
+    response += "• `/add <code> <qty> <price> <sec> [name] [flag]` - Add/update country\n"
+    response += "• `/countries` - List all configured countries\n"
+    response += "• `/cun <country_code> <quantity>` - Set country capacity\n"
+    response += "• `/setprice <country_code> <price>` - Set country price\n"
+    response += "• `/settime <country_code> <seconds>` - Set claim time\n"
+    response += "• `/numberd <country_code>` - Remove country\n\n"
+    
+    response += "*2️⃣ PAYMENT & WITHDRAWALS* 💰\n"
+    response += "• `/pay <user_id>` - Approve withdrawal for user\n"
+    response += "• `/paycard <card_name>` - Approve all withdrawals for card\n"
+    response += "• `/rejectpayment <user_id|card:name> [reason]` - Reject withdrawals\n"
+    response += "• `/cardw <card_name>` - Check withdrawal stats for card\n"
+    response += "• `/card <card_name>` - Add new leader card\n\n"
+    
+    response += "*3️⃣ USER MANAGEMENT* 👥\n"
+    response += "• `/userdel <user_id>` - Delete user and all data\n"
+    response += "• `/notice` - Send notification to all users\n"
+    response += "• `/cleanusers` - Check for blocked users\n"
+    response += "• `/removeblocked` - Remove blocked users\n\n"
+    
+    response += "*4️⃣ SESSION MANAGEMENT* 📱\n"
+    response += "• `/sessions` - View session overview by country\n"
+    response += "• `/sessionstats` - Detailed statistics\n"
+    response += "• `/migratesessions` - Migrate legacy sessions\n"
+    response += "• `/cleanupsessions` - Remove empty folders\n"
+    response += "• `/exportsessions` - Export session info to JSON\n\n"
+    
+    response += "*5️⃣ SESSION DOWNLOAD & EXPORT* 📥\n"
+    response += "• `/get +country_code [YYYYMMDD]` - Download sessions (zip)\n"
+    response += "• `/getall [+country_code] [YYYYMMDD]` - Download all sessions\n"
+    response += "• `/getinfo +country_code [YYYYMMDD]` - Get detailed info\n\n"
+    
+    response += "*6️⃣ SESSION CLEANUP* 🧹\n"
+    response += "• `/deletesessions +country_code [YYYYMMDD]` - Delete sessions\n"
+    response += "• `/cleansessionsall` - Delete all session files\n\n"
+    
+    response += "*7️⃣ DEVICE MONITORING* 📊\n"
+    response += "• `/checkdevices +number` - Check device count\n"
+    response += "• `/testdevicereward +number` - Test reward eligibility\n"
+    response += "• `/devicestatus` - Show device security status\n"
+    response += "• `/testfailmessage <language> +number` - Test failure messages\n\n"
+    
+    response += "*8️⃣ SYSTEM INFORMATION* ℹ️\n"
+    response += "• `/admin` - Show this admin command list\n\n"
+    
+    response += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    response += "🔐 *Admin Access: SUPER ADMIN | Total: 29 Commands*\n"
+    response += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
     bot.reply_to(message, response, parse_mode="Markdown")
 
