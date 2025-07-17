@@ -74,8 +74,8 @@ def handle_admin(message):
     response += "*9️⃣ PROXY MANAGEMENT* 🌐\n"
     response += "• `/proxystats` - Show proxy statistics\n"
     response += "• `/resetproxies` - Reset failed proxy list\n"
-    response += "• `/reloadproxies` - Reload proxy configuration
-• `/checkproxy` - Test proxy health manually\n\n"
+    response += "• `/reloadproxies` - Reload proxy configuration\n"
+    response += "• `/checkproxy` - Test proxy health manually\n\n"
     
     response += "*🔟 SYSTEM INFORMATION* ℹ️\n"
     response += "• `/admin` - Show this admin command list\n\n"
