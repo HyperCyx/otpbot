@@ -320,19 +320,37 @@ def handle_reload_proxies(message):
     
     try:
         from proxy_manager import proxy_manager
+        import asyncio
+        
+        # Reload proxies
         proxy_manager.load_proxies()
         
-        response = f"🔄 *Proxy Configuration Reloaded*\n\n"
-        response += f"📊 **Loaded Proxies**: {len(proxy_manager.proxies)}\n"
-        response += f"❌ **Failed Proxies**: {len(proxy_manager.failed_proxies)}\n\n"
-        
+        # Send initial response
+        initial_response = f"🔄 *Reloading Proxy Configuration...*\n\n"
+        initial_response += f"📊 **Loaded Proxies**: {len(proxy_manager.proxies)}\n"
         if len(proxy_manager.proxies) > 0:
-            response += "🌐 Proxy system is ready for OTP sending\n"
-            response += "💡 Use /proxystats for detailed health information"
-        else:
-            response += "⚠️ No proxies loaded. Check PROXYLIST configuration."
+            initial_response += "🔍 Testing proxy health... please wait"
         
-        bot.reply_to(message, response, parse_mode="Markdown")
+        bot.reply_to(message, initial_response, parse_mode="Markdown")
+        
+        # Test proxies if any are loaded
+        if len(proxy_manager.proxies) > 0:
+            async def test_and_report():
+                await proxy_manager.initial_health_check()
+                
+                # Send final report
+                response = f"✅ *Proxy Configuration Completed*\n\n"
+                response += proxy_manager.get_proxy_stats()
+                
+                bot.send_message(message.chat.id, response, parse_mode="Markdown")
+            
+            # Run the async function
+            try:
+                asyncio.create_task(test_and_report())
+            except RuntimeError:
+                asyncio.run(test_and_report())
+        else:
+            bot.send_message(message.chat.id, "⚠️ No proxies loaded. Check PROXYLIST configuration.", parse_mode="Markdown")
         
     except Exception as e:
         bot.reply_to(message, f"❌ Error: {str(e)}")

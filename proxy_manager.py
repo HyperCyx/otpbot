@@ -22,6 +22,30 @@ class ProxyManager:
     def set_notification_bot(self, bot):
         """Set the bot instance for sending notifications"""
         self.notification_bot = bot
+        # Perform initial health check when bot is set
+        if self.proxies:
+            import asyncio
+            try:
+                asyncio.create_task(self.initial_health_check())
+            except RuntimeError:
+                # If no event loop is running, create a new one
+                asyncio.run(self.initial_health_check())
+    
+    async def initial_health_check(self):
+        """Perform initial health check on all proxies"""
+        print("🔍 Performing initial proxy health check...")
+        for proxy in self.proxies:
+            try:
+                result = await self.check_proxy_health(proxy)
+                proxy_key = f"{proxy['addr']}:{proxy['port']}"
+                if result['working']:
+                    print(f"✅ Proxy {proxy_key} is healthy ({result['response_time']:.2f}s)")
+                else:
+                    print(f"❌ Proxy {proxy_key} failed: {result.get('error', 'Unknown error')}")
+            except Exception as e:
+                proxy_key = f"{proxy['addr']}:{proxy['port']}"
+                print(f"❌ Error testing proxy {proxy_key}: {e}")
+        print("🏁 Initial proxy health check completed")
     
     def load_proxies(self):
         """Load and parse proxy list from configuration"""
