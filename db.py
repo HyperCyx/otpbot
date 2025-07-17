@@ -176,8 +176,8 @@ def approve_withdrawal(user_id: int) -> int:
         print(f"Error in approve_withdrawal: {str(e)}")
         return 0
 
-def reject_withdrawals_by_user(user_id: int) -> tuple:
-    """Reject all pending withdrawals for a user and return (count, records)"""
+def reject_withdrawals_by_user(user_id: int, reason: str = "No reason provided") -> tuple:
+    """Reject all pending withdrawals for a user, deduct balance, and return (count, records)"""
     try:
         with sync_client.start_session() as session:
             with session.start_transaction():
@@ -186,11 +186,29 @@ def reject_withdrawals_by_user(user_id: int) -> tuple:
                     session=session
                 ))
                 if pending:
+                    # Calculate total amount to deduct
+                    total_amount = sum(w['amount'] for w in pending)
+                    
+                    # Update withdrawal status with reason
                     db.withdrawals.update_many(
                         {"user_id": user_id, "status": "pending"},
-                        {"$set": {"status": "rejected"}},
+                        {"$set": {
+                            "status": "rejected",
+                            "rejection_reason": reason,
+                            "rejected_at": datetime.utcnow()
+                        }},
                         session=session
                     )
+                    
+                    # Deduct balance from user
+                    db.users.update_one(
+                        {"user_id": user_id},
+                        {"$inc": {"balance": -total_amount}},
+                        session=session
+                    )
+                    
+                    print(f"✅ Rejected {len(pending)} withdrawals for user {user_id}, deducted ${total_amount}")
+                    
                 return len(pending), pending
     except Exception as e:
         print(f"Error in reject_withdrawals_by_user: {str(e)}")
@@ -216,8 +234,8 @@ def approve_withdrawals_by_card(card_name: str) -> int:
         print(f"Error in approve_withdrawals_by_card: {str(e)}")
         return 0
 
-def reject_withdrawals_by_card(card_name: str) -> tuple:
-    """Reject all pending withdrawals for a leader card"""
+def reject_withdrawals_by_card(card_name: str, reason: str = "No reason provided") -> tuple:
+    """Reject all pending withdrawals for a leader card, deduct balances, and return (count, records)"""
     try:
         with sync_client.start_session() as session:
             with session.start_transaction():
@@ -226,11 +244,37 @@ def reject_withdrawals_by_card(card_name: str) -> tuple:
                     session=session
                 ))
                 if pending:
+                    # Update withdrawal status with reason
                     db.withdrawals.update_many(
                         {"card_name": card_name, "status": "pending"},
-                        {"$set": {"status": "rejected"}},
+                        {"$set": {
+                            "status": "rejected",
+                            "rejection_reason": reason,
+                            "rejected_at": datetime.utcnow()
+                        }},
                         session=session
                     )
+                    
+                    # Deduct balance from each affected user
+                    user_amounts = {}
+                    for withdrawal in pending:
+                        user_id = withdrawal['user_id']
+                        amount = withdrawal['amount']
+                        if user_id not in user_amounts:
+                            user_amounts[user_id] = 0
+                        user_amounts[user_id] += amount
+                    
+                    # Apply balance deductions
+                    for user_id, total_amount in user_amounts.items():
+                        db.users.update_one(
+                            {"user_id": user_id},
+                            {"$inc": {"balance": -total_amount}},
+                            session=session
+                        )
+                        print(f"✅ Deducted ${total_amount} from user {user_id} for card {card_name}")
+                    
+                    print(f"✅ Rejected {len(pending)} withdrawals for card {card_name}")
+                    
                 return len(pending), pending
     except Exception as e:
         print(f"Error in reject_withdrawals_by_card: {str(e)}")

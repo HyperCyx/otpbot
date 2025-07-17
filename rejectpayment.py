@@ -8,17 +8,21 @@ from db import (
 from utils import require_channel_membership
 import re
 
-def notify_user_rejection(user_id, withdrawals):
-    """Send rejection notification to user"""
+def notify_user_rejection(user_id, withdrawals, reason="No reason provided"):
+    """Send rejection notification to user with custom reason"""
     total_amount = sum(w['amount'] for w in withdrawals)
     try:
         bot.send_message(
             user_id,
-            f"❌ Your withdrawal request(s) totaling {total_amount}$ have been rejected.\n\n"
-            "Reason: Admin rejected the request\n"
-            "Contact support if you have questions.",
+            f"❌ *Withdrawal Rejected* ❌\n\n"
+            f"💰 **Amount**: ${total_amount}\n"
+            f"📋 **Reason**: {reason}\n"
+            f"📉 **Balance deducted**: ${total_amount}\n\n"
+            f"💬 Contact support if you have questions about this rejection.\n"
+            f"🔄 You can make a new withdrawal request if eligible.",
             parse_mode="Markdown"
         )
+        print(f"✅ Notified user {user_id} about rejection (${total_amount}) - Reason: {reason}")
     except Exception as e:
         print(f"Could not notify user {user_id}: {str(e)}")
 
@@ -46,16 +50,30 @@ def handle_reject_payment(message):
     # Check if rejecting by card
     if target.startswith("card:"):
         card_name = target[5:]  # Remove 'card:' prefix
-        count, withdrawals = reject_withdrawals_by_card(card_name)
+        count, withdrawals = reject_withdrawals_by_card(card_name, reason)
         if count > 0:
-            # Notify each affected user
-            user_notified = set()
+            # Notify each affected user with reason
+            user_withdrawals = {}
             for w in withdrawals:
-                if w['user_id'] not in user_notified:
-                    notify_user_rejection(w['user_id'], [w for w in withdrawals if w['user_id'] == w['user_id']])
-                    user_notified.add(w['user_id'])
+                user_id = w['user_id']
+                if user_id not in user_withdrawals:
+                    user_withdrawals[user_id] = []
+                user_withdrawals[user_id].append(w)
             
-            bot.reply_to(message, f"✅ Rejected {count} pending withdrawals for card: {card_name}")
+            # Send notifications with custom reason
+            for user_id, user_w_list in user_withdrawals.items():
+                notify_user_rejection(user_id, user_w_list, reason)
+            
+            total_amount = sum(w['amount'] for w in withdrawals)
+            bot.reply_to(message, 
+                f"✅ *Payment Rejection Completed*\n\n"
+                f"💳 **Card**: {card_name}\n"
+                f"📊 **Withdrawals**: {count}\n"
+                f"💰 **Total Amount**: ${total_amount}\n"
+                f"📋 **Reason**: {reason}\n"
+                f"👥 **Users Notified**: {len(user_withdrawals)}\n"
+                f"📉 **Balances Deducted**: Yes",
+                parse_mode="Markdown")
         else:
             bot.reply_to(message, f"❌ No pending withdrawals found for card: {card_name}")
         return
@@ -68,10 +86,19 @@ def handle_reject_payment(message):
             bot.reply_to(message, f"❌ User {user_id} not found")
             return
 
-        count, withdrawals = reject_withdrawals_by_user(user_id)
+        count, withdrawals = reject_withdrawals_by_user(user_id, reason)
         if count > 0:
-            notify_user_rejection(user_id, withdrawals)
-            bot.reply_to(message, f"✅ Rejected {count} pending withdrawals for user {user_id}")
+            notify_user_rejection(user_id, withdrawals, reason)
+            total_amount = sum(w['amount'] for w in withdrawals)
+            bot.reply_to(message, 
+                f"✅ *Payment Rejection Completed*\n\n"
+                f"👤 **User ID**: {user_id}\n"
+                f"📊 **Withdrawals**: {count}\n"
+                f"💰 **Total Amount**: ${total_amount}\n"
+                f"📋 **Reason**: {reason}\n"
+                f"📉 **Balance Deducted**: ${total_amount}\n"
+                f"📨 **User Notified**: Yes",
+                parse_mode="Markdown")
         else:
             bot.reply_to(message, f"❌ No pending withdrawals found for user {user_id}")
     except ValueError:
