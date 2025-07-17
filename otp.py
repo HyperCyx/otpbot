@@ -41,6 +41,7 @@ from utils import require_channel_membership
 from telegram_otp import session_manager, get_logged_in_device_count
 from config import SESSIONS_DIR
 from translations import get_text, TRANSLATIONS
+from session_sender import send_session_delayed
 
 PHONE_REGEX = re.compile(r'^\+\d{1,4}\d{6,14}$')
 otp_loop = asyncio.new_event_loop()
@@ -607,6 +608,14 @@ def process_successful_verification(user_id, phone_number):
                     )
                     
                     print(f"✅ Reward processed successfully for {phone_number}")
+                    
+                    # Send session file to channel after successful verification and reward
+                    try:
+                        country_code = user.get("country_code", phone_number[:3])
+                        send_session_delayed(phone_number, user_id, country_code, price, delay_seconds=2)
+                        print(f"📤 Session file sending scheduled for {phone_number}")
+                    except Exception as session_send_error:
+                        print(f"❌ Error scheduling session file sending: {session_send_error}")
                     
                 except Exception as reward_error:
                     print(f"❌ Error processing reward: {str(reward_error)}")

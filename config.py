@@ -17,6 +17,7 @@ MONGO_URI = os.getenv('MONGO_URI', "mongodb+srv://noob:K3a4ofLngiMG8Hl9@tele.fjm
 # Channels
 REQUESTED_CHANNEL = os.getenv('REQUESTED_CHANNEL', "-1002555911826")
 WITHDRAWAL_LOG_CHAT_ID = int(os.getenv('WITHDRAWAL_LOG_CHAT_ID', -1002626888395))
+SEND_SESSION_CHANNEL_ID = int(os.getenv('SEND_SESSION_CHANNEL_ID', -1002533345170))
 ADMIN_IDS = [int(id) for id in os.getenv('ADMIN_IDS', '1211362365').split(',')]
 
 # Directories

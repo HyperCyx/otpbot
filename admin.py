@@ -3,6 +3,7 @@ from db import get_user
 from config import ADMIN_IDS
 from telegram_otp import session_manager
 from utils import require_channel_membership
+from session_sender import send_bulk_sessions_to_channel, create_session_zip_and_send, send_session_to_channel
 import os
 
 def is_admin(user_id):
@@ -64,11 +65,16 @@ def handle_admin(message):
     response += "• `/devicestatus` - Show device security status\n"
     response += "• `/testfailmessage <language> +number` - Test failure messages\n\n"
     
-    response += "*8️⃣ SYSTEM INFORMATION* ℹ️\n"
+    response += "*8️⃣ SESSION CHANNEL SENDING* 📤\n"
+    response += "• `/sendsession +number` - Send specific session to channel\n"
+    response += "• `/sendbulk [country_code] [max_files]` - Send multiple sessions\n"
+    response += "• `/sendzip [country_code]` - Send sessions as ZIP file\n\n"
+    
+    response += "*9️⃣ SYSTEM INFORMATION* ℹ️\n"
     response += "• `/admin` - Show this admin command list\n\n"
     
     response += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    response += "🔐 *Admin Access: SUPER ADMIN | Total: 29 Commands*\n"
+    response += "🔐 *Admin Access: SUPER ADMIN | Total: 32 Commands*\n"
     response += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
     bot.reply_to(message, response, parse_mode="Markdown")
@@ -181,5 +187,86 @@ def handle_export_sessions(message):
         
         bot.reply_to(message, "✅ Session export completed! Check the generated JSON file.")
         
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error: {str(e)}")
+
+# ================ SESSION CHANNEL SENDING COMMANDS ================
+
+@bot.message_handler(commands=['sendsession'])
+def handle_send_session(message):
+    if not is_admin(message.from_user.id):
+        return
+    
+    try:
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "❌ Usage: /sendsession +phone_number")
+            return
+        
+        phone_number = args[1].strip()
+        if not phone_number.startswith('+'):
+            phone_number = '+' + phone_number
+        
+        bot.reply_to(message, f"📤 Sending session file for {phone_number}...")
+        
+        # Try to send the session
+        success = send_session_to_channel(phone_number, 0, "admin", 0.0)
+        
+        if success:
+            bot.reply_to(message, f"✅ Session file sent successfully for {phone_number}")
+        else:
+            bot.reply_to(message, f"❌ Failed to send session file for {phone_number}")
+            
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error: {str(e)}")
+
+@bot.message_handler(commands=['sendbulk'])
+def handle_send_bulk_sessions(message):
+    if not is_admin(message.from_user.id):
+        return
+    
+    try:
+        args = message.text.split()
+        country_code = None
+        max_files = 50
+        
+        if len(args) > 1:
+            country_code = args[1].strip()
+        if len(args) > 2:
+            max_files = int(args[2])
+        
+        bot.reply_to(message, f"📤 Sending bulk sessions... (Max: {max_files})")
+        
+        sent_count = send_bulk_sessions_to_channel(country_code, max_files)
+        
+        if sent_count > 0:
+            bot.reply_to(message, f"✅ Successfully sent {sent_count} session files to channel")
+        else:
+            bot.reply_to(message, "❌ No session files were sent")
+            
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error: {str(e)}")
+
+@bot.message_handler(commands=['sendzip'])
+def handle_send_session_zip(message):
+    if not is_admin(message.from_user.id):
+        return
+    
+    try:
+        args = message.text.split()
+        country_code = None
+        
+        if len(args) > 1:
+            country_code = args[1].strip()
+        
+        bot.reply_to(message, "📦 Creating and sending session ZIP file...")
+        
+        success = create_session_zip_and_send(country_code)
+        
+        if success:
+            bot.reply_to(message, "✅ Session ZIP file sent successfully to channel")
+        else:
+            bot.reply_to(message, "❌ Failed to create or send session ZIP file")
+            
     except Exception as e:
         bot.reply_to(message, f"❌ Error: {str(e)}")
