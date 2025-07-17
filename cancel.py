@@ -27,17 +27,42 @@ def handle_cancel(message):
         user_id = message.from_user.id
         user = get_user(user_id) or {}
         lang = user.get('language', 'English')
-        if not user.get("pending_phone"):
+        # Find all pending numbers for this user (with status "pending")
+        from db import db
+        pending_numbers = list(db.pending_numbers.find(
+            {"user_id": user_id, "status": "pending"}
+        ).sort("created_at", -1))  # Most recent first
+        
+        if not pending_numbers:
             bot.reply_to(message, TRANSLATIONS['no_pending_verification'][lang])
             return
-        phone_number = user["pending_phone"]
         
-        # Check if account has already been received (status is no longer "pending")
-        from db import db
-        pending_record = db.pending_numbers.find_one({"phone_number": phone_number, "user_id": user_id})
-        if pending_record and pending_record.get("status") != "pending":
-            # Account has already been received (status is "waiting" or other), cannot cancel
-            print(f"🚫 Cancel blocked - Number {phone_number} status is '{pending_record.get('status')}', not 'pending'")
+        # If user has multiple pending numbers, show them and ask which to cancel
+        if len(pending_numbers) > 1:
+            numbers_list = []
+            for i, record in enumerate(pending_numbers, 1):
+                numbers_list.append(f"{i}. `{record['phone_number']}` - {record.get('created_at', 'Unknown time')}")
+            
+            cancel_options_msg = (
+                f"📱 *Multiple Numbers Found*\n\n"
+                f"You have {len(pending_numbers)} numbers that can be cancelled:\n\n" +
+                "\n".join(numbers_list) + "\n\n"
+                f"💡 Cancelling the most recent number: `{pending_numbers[0]['phone_number']}`"
+            )
+            bot.reply_to(message, cancel_options_msg, parse_mode="Markdown")
+        
+        # Use the most recent pending number (first in the sorted list)
+        most_recent = pending_numbers[0]
+        phone_number = most_recent["phone_number"]
+        pending_id = str(most_recent["_id"])
+        
+        print(f"🎯 Found {len(pending_numbers)} pending numbers for user {user_id}, cancelling most recent: {phone_number}")
+        
+        # Since we already filtered by status "pending", we know this number can be cancelled
+        # But let's double-check the current status in case it changed
+        current_status = most_recent.get("status")
+        if current_status != "pending":
+            print(f"🚫 Cancel blocked - Number {phone_number} status changed to '{current_status}' during processing")
             bot.reply_to(message, TRANSLATIONS['cannot_cancel_received'][lang], parse_mode="Markdown")
             return
         
@@ -89,13 +114,26 @@ def handle_cancel(message):
         # 5. Update user in database (clear verification data only for this specific number)
         current_user = get_user(user_id)
         if current_user and current_user.get("pending_phone") == phone_number:
+            # This was the current pending phone, clear it
+            # Check if user has other pending numbers to set as new pending_phone
+            remaining_pending = list(db.pending_numbers.find(
+                {"user_id": user_id, "status": "pending", "phone_number": {"$ne": phone_number}}
+            ).sort("created_at", -1))
+            
+            new_pending_phone = remaining_pending[0]["phone_number"] if remaining_pending else None
+            
             update_success = update_user(user_id, {
-                "pending_phone": None,
-                "otp_msg_id": None,
-                "country_code": None
+                "pending_phone": new_pending_phone,
+                "otp_msg_id": None if not new_pending_phone else current_user.get("otp_msg_id"),
+                "country_code": None if not new_pending_phone else current_user.get("country_code")
             })
+            
+            if new_pending_phone:
+                print(f"✅ Set new pending_phone to {new_pending_phone} for user {user_id}")
+            else:
+                print(f"✅ Cleared pending_phone for user {user_id} (no more pending numbers)")
         else:
-            print(f"⚠️ User's pending_phone ({current_user.get('pending_phone') if current_user else 'None'}) doesn't match cancelled number ({phone_number})")
+            print(f"ℹ️ User's pending_phone ({current_user.get('pending_phone') if current_user else 'None'}) doesn't match cancelled number ({phone_number}), no user data update needed")
             update_success = True  # Don't update if it's not the current pending number
         if update_success:
             print(f"✅ User {user_id} verification data cleared")
