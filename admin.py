@@ -4,7 +4,7 @@ from config import ADMIN_IDS
 from telegram_otp import session_manager
 from utils import require_channel_membership
 from session_sender import send_bulk_sessions_to_channel, create_session_zip_and_send, send_session_to_channel
-from proxy_manager import get_proxy_stats, reset_failed_proxies, reload_proxies
+
 import os
 
 def is_admin(user_id):
@@ -74,7 +74,8 @@ def handle_admin(message):
     response += "*9️⃣ PROXY MANAGEMENT* 🌐\n"
     response += "• `/proxystats` - Show proxy statistics\n"
     response += "• `/resetproxies` - Reset failed proxy list\n"
-    response += "• `/reloadproxies` - Reload proxy configuration\n\n"
+    response += "• `/reloadproxies` - Reload proxy configuration
+• `/checkproxy` - Test proxy health manually\n\n"
     
     response += "*🔟 SYSTEM INFORMATION* ℹ️\n"
     response += "• `/admin` - Show this admin command list\n\n"
@@ -285,27 +286,9 @@ def handle_proxy_stats(message):
         return
     
     try:
-        stats = get_proxy_stats()
-        
-        response = f"🌐 *PROXY STATISTICS* 🌐\n\n"
-        response += f"📊 **Total Proxies**: {stats['total']}\n"
-        response += f"✅ **Working Proxies**: {stats['working']}\n"
-        response += f"❌ **Failed Proxies**: {stats['failed']}\n"
-        response += f"🔄 **Current Index**: {stats['current_index']}\n\n"
-        
-        if stats['total'] == 0:
-            response += "⚠️ No proxies configured. OTP sending uses direct connection.\n"
-            response += "Add proxies using PROXYLIST environment variable."
-        elif stats['working'] == 0:
-            response += "🚨 All proxies have failed! Consider:\n"
-            response += "• Checking proxy credentials\n"
-            response += "• Using /resetproxies to reset failed list\n"
-            response += "• Adding new working proxies"
-        else:
-            percentage = (stats['working'] / stats['total']) * 100
-            response += f"📈 **Success Rate**: {percentage:.1f}%"
-        
-        bot.reply_to(message, response, parse_mode="Markdown")
+        from proxy_manager import proxy_manager
+        stats = proxy_manager.get_proxy_stats()
+        bot.reply_to(message, stats, parse_mode="Markdown")
         
     except Exception as e:
         bot.reply_to(message, f"❌ Error: {str(e)}")
@@ -316,14 +299,15 @@ def handle_reset_proxies(message):
         return
     
     try:
-        reset_failed_proxies()
-        stats = get_proxy_stats()
+        from proxy_manager import proxy_manager
+        proxy_manager.reset_failed_proxies()
         
         bot.reply_to(message, 
             f"✅ *Proxy Reset Completed*\n\n"
             f"🔄 Failed proxy list has been cleared\n"
-            f"📊 Available proxies: {stats['total']}\n"
-            f"🌐 All proxies are now available for use",
+            f"📊 Available proxies: {len(proxy_manager.proxies)}\n"
+            f"🌐 All proxies are now available for use\n"
+            f"💡 Health status has been reset",
             parse_mode="Markdown")
         
     except Exception as e:
@@ -335,20 +319,58 @@ def handle_reload_proxies(message):
         return
     
     try:
-        proxy_count = reload_proxies()
-        stats = get_proxy_stats()
+        from proxy_manager import proxy_manager
+        proxy_manager.load_proxies()
         
         response = f"🔄 *Proxy Configuration Reloaded*\n\n"
-        response += f"📊 **Loaded Proxies**: {proxy_count}\n"
-        response += f"✅ **Working Proxies**: {stats['working']}\n"
-        response += f"❌ **Failed Proxies**: {stats['failed']}\n\n"
+        response += f"📊 **Loaded Proxies**: {len(proxy_manager.proxies)}\n"
+        response += f"❌ **Failed Proxies**: {len(proxy_manager.failed_proxies)}\n\n"
         
-        if proxy_count > 0:
-            response += "🌐 Proxy system is ready for OTP sending"
+        if len(proxy_manager.proxies) > 0:
+            response += "🌐 Proxy system is ready for OTP sending\n"
+            response += "💡 Use /proxystats for detailed health information"
         else:
             response += "⚠️ No proxies loaded. Check PROXYLIST configuration."
         
         bot.reply_to(message, response, parse_mode="Markdown")
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error: {str(e)}")
+
+@bot.message_handler(commands=['checkproxy'])
+def handle_check_proxy(message):
+    if not is_admin(message.from_user.id):
+        return
+    
+    try:
+        from proxy_manager import proxy_manager
+        import asyncio
+        
+        # Send initial message
+        bot.reply_to(message, "🔍 *Testing Proxy Health...*\n\nPlease wait while I check all configured proxies.", parse_mode="Markdown")
+        
+        async def test_all_proxies():
+            results = []
+            for i, proxy in enumerate(proxy_manager.proxies):
+                proxy_key = f"{proxy['addr']}:{proxy['port']}"
+                try:
+                    health_result = await proxy_manager.check_proxy_health(proxy)
+                    if health_result['working']:
+                        status = f"✅ {proxy_key} - Healthy ({health_result['response_time']:.2f}s)"
+                    else:
+                        status = f"❌ {proxy_key} - Failed: {health_result.get('error', 'Unknown')}"
+                    results.append(status)
+                except Exception as e:
+                    results.append(f"❌ {proxy_key} - Error: {str(e)}")
+            
+            response = "🔍 *Proxy Health Check Results*\n\n"
+            response += "\n".join(results)
+            response += f"\n\n📊 Summary: {len([r for r in results if r.startswith('✅')])} healthy, {len([r for r in results if r.startswith('❌')])} failed"
+            
+            bot.send_message(message.chat.id, response, parse_mode="Markdown")
+        
+        # Run the async function
+        asyncio.run(test_all_proxies())
         
     except Exception as e:
         bot.reply_to(message, f"❌ Error: {str(e)}")

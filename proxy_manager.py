@@ -66,6 +66,9 @@ class ProxyManager:
                 self.current_proxy_index = random.randint(0, len(self.proxies) - 1)
             else:
                 print("⚠️ No valid proxies loaded. OTP will be sent without proxy.")
+        
+        except Exception as e:
+            print(f"❌ Error loading proxy configuration: {e}")
     
     async def check_proxy_health(self, proxy_config: dict) -> dict:
         """Check if a proxy is working properly and measure performance"""
@@ -75,13 +78,11 @@ class ProxyManager:
             start_time = time.time()
             
             # Test proxy by making a simple HTTP request through it
-            connector = aiohttp.connector.ProxyConnector.from_url(
-                f"socks5://{proxy_config['username']}:{proxy_config['password']}@{proxy_config['addr']}:{proxy_config['port']}"
-            )
+            proxy_url = f"socks5://{proxy_config['username']}:{proxy_config['password']}@{proxy_config['addr']}:{proxy_config['port']}"
             
             timeout = aiohttp.ClientTimeout(total=10)
-            async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-                async with session.get('http://httpbin.org/ip') as response:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get('http://httpbin.org/ip', proxy=proxy_url) as response:
                     if response.status == 200:
                         response_time = time.time() - start_time
                         
