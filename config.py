@@ -15,7 +15,7 @@ DEFAULT_2FA_PASSWORD = os.getenv('DEFAULT_2FA_PASSWORD', 'AA@@')
 MONGO_URI = os.getenv('MONGO_URI', "mongodb+srv://noob:K3a4ofLngiMG8Hl9@tele.fjm9acq.mongodb.net/?retryWrites=true&w=majority")
 
 # Channels
-REQUESTED_CHANNEL = os.getenv('REQUESTED_CHANNEL', "@DragonReceiver22")
+REQUESTED_CHANNEL = os.getenv('REQUESTED_CHANNEL', "-1002119088215")
 WITHDRAWAL_LOG_CHAT_ID = int(os.getenv('WITHDRAWAL_LOG_CHAT_ID', -1002538505443))
 ADMIN_IDS = [int(id) for id in os.getenv('ADMIN_IDS', '1324269327').split(',')]
 
