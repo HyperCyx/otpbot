@@ -36,52 +36,18 @@ def handle_cancel(message):
         # If no pending numbers in database, check if user has pending_phone (OTP phase)
         if not pending_numbers:
             if user.get("pending_phone"):
-                # User is in OTP phase, use the pending_phone
+                # User is in OTP phase, create a fake pending_numbers list for button interface
                 phone_number = user["pending_phone"]
                 print(f"🎯 No pending numbers in database, but user has pending_phone: {phone_number} (OTP phase)")
                 
-                # Handle OTP phase cancellation
-                print(f"🗑️ Cancelling OTP verification for {phone_number} (User: {user_id})")
-                
-                # Cancel background verification and clean up
-                from otp import cancel_background_verification
-                background_cancelled, background_phone = cancel_background_verification(user_id)
-                if background_cancelled:
-                    print(f"🛑 Background verification cancelled for {background_phone}")
-                    import time
-                    time.sleep(1)
-                
-                # Clean up session files
-                session_info = session_manager.get_session_info(phone_number)
-                session_path = session_info["session_path"]
-                temp_session_path = session_manager.user_states.get(user_id, {}).get("session_path")
-                
-                for path in [session_path, temp_session_path]:
-                    try:
-                        if path and os.path.exists(path):
-                            os.remove(path)
-                            print(f"✅ Removed session file: {path}")
-                    except Exception as e:
-                        print(f"Error removing session file {path}: {e}")
-                
-                # Clean up session manager state
-                cleanup_success = run_async(session_manager.cleanup_session(user_id))
-                
-                # Clear user data
-                update_user(user_id, {
-                    "pending_phone": None,
-                    "otp_msg_id": None,
-                    "country_code": None
-                })
-                
-                # Unmark number as used
-                unmark_number_used(phone_number)
-                
-                # Send confirmation message
-                status_msg = TRANSLATIONS['verification_cancelled'][lang].format(phone=phone_number)
-                bot.reply_to(message, status_msg, parse_mode="Markdown")
-                print(f"✅ Successfully cancelled OTP verification for {phone_number}")
-                return
+                # Create a fake record to show in button interface
+                pending_numbers = [{
+                    "phone_number": phone_number,
+                    "status": "pending",
+                    "created_at": "OTP Phase",
+                    "_id": "otp_phase"
+                }]
+                print(f"🎯 Created OTP phase button interface for {phone_number}")
             else:
                 bot.reply_to(message, TRANSLATIONS['no_pending_verification'][lang])
                 return
@@ -176,7 +142,7 @@ def handle_cancel_callback(call):
             # User clicked on a specific phone number
             phone_number = action
             
-            # Verify this number belongs to the user and can be cancelled
+            # Check if this is an OTP phase cancellation or regular pending number
             from db import db
             pending_record = db.pending_numbers.find_one({
                 "user_id": user_id, 
@@ -184,12 +150,19 @@ def handle_cancel_callback(call):
                 "status": "pending"
             })
             
-            if not pending_record:
+            # Check if this is OTP phase (no database record but user has pending_phone)
+            user_data = get_user(user_id)
+            is_otp_phase = not pending_record and user_data and user_data.get("pending_phone") == phone_number
+            
+            if not pending_record and not is_otp_phase:
                 bot.answer_callback_query(call.id, "❌ This number cannot be cancelled")
                 return
             
-            # Perform the cancellation
-            success = cancel_specific_number(user_id, phone_number, lang)
+            # Perform the cancellation (different logic for OTP phase vs regular)
+            if is_otp_phase:
+                success = cancel_otp_phase_number(user_id, phone_number, lang)
+            else:
+                success = cancel_specific_number(user_id, phone_number, lang)
             
             if success:
                 bot.answer_callback_query(call.id, f"✅ Cancelled {phone_number}")
@@ -198,6 +171,19 @@ def handle_cancel_callback(call):
                 remaining_numbers = list(db.pending_numbers.find(
                     {"user_id": user_id, "status": "pending"}
                 ).sort("created_at", -1))
+                
+                # Check if user still has pending_phone (OTP phase) after cancellation
+                updated_user = get_user(user_id)
+                has_otp_phase = updated_user and updated_user.get("pending_phone")
+                
+                # Add OTP phase number to remaining list if it exists
+                if has_otp_phase and not is_otp_phase:  # Only add if we didn't just cancel the OTP phase
+                    remaining_numbers.append({
+                        "phone_number": updated_user["pending_phone"],
+                        "status": "pending",
+                        "created_at": "OTP Phase",
+                        "_id": "otp_phase"
+                    })
                 
                 if remaining_numbers:
                     # Update the button list with remaining numbers
@@ -243,6 +229,52 @@ def handle_cancel_callback(call):
     except Exception as e:
         bot.answer_callback_query(call.id, "⚠️ Error occurred")
         print(f"❌ Cancel callback error: {e}")
+
+def cancel_otp_phase_number(user_id: int, phone_number: str, lang: str) -> bool:
+    """Cancel a number that's in OTP phase (not yet in pending_numbers table)"""
+    try:
+        print(f"🗑️ Cancelling OTP verification for {phone_number} (User: {user_id})")
+        
+        # Cancel background verification
+        from otp import cancel_background_verification
+        background_cancelled, background_phone = cancel_background_verification(user_id)
+        if background_cancelled:
+            print(f"🛑 Background verification cancelled for {background_phone}")
+            import time
+            time.sleep(1)
+        
+        # Clean up session files
+        session_info = session_manager.get_session_info(phone_number)
+        session_path = session_info["session_path"]
+        temp_session_path = session_manager.user_states.get(user_id, {}).get("session_path")
+        
+        for path in [session_path, temp_session_path]:
+            try:
+                if path and os.path.exists(path):
+                    os.remove(path)
+                    print(f"✅ Removed session file: {path}")
+            except Exception as e:
+                print(f"Error removing session file {path}: {e}")
+        
+        # Clean up session manager state
+        cleanup_success = run_async(session_manager.cleanup_session(user_id))
+        
+        # Clear user data
+        update_user(user_id, {
+            "pending_phone": None,
+            "otp_msg_id": None,
+            "country_code": None
+        })
+        
+        # Unmark number as used
+        unmark_number_used(phone_number)
+        
+        print(f"✅ Successfully cancelled OTP verification for {phone_number}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error cancelling OTP phase {phone_number}: {e}")
+        return False
 
 def cancel_specific_number(user_id: int, phone_number: str, lang: str) -> bool:
     """Cancel a specific number for a user"""
