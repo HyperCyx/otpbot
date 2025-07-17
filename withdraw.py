@@ -37,15 +37,10 @@ def clear_withdraw_state(user_id):
 @bot.message_handler(commands=['withdraw'])
 @require_channel_membership
 def handle_withdraw(message):
-    # Test message to confirm handler is called
-    bot.send_message(message.chat.id, "🔍 TEST: Withdraw command received!")
-    
     user_id = message.from_user.id
     user = get_user(user_id) or {}
     balance = user.get('balance', 0.0)
     user_language = user.get('language', 'English')
-    
-    print(f"🔍 DEBUG: Withdraw command called by user {user_id}, balance: {balance}")
     
     # Clear any existing state first
     clear_withdraw_state(user_id)
@@ -56,53 +51,28 @@ def handle_withdraw(message):
         bot.send_message(message.chat.id, f"❌ {error_msg}")
         return
     
-    print(f"🔍 DEBUG: No pending withdrawal, showing buttons...")
-    
-    # Show withdrawal options with buttons - ALWAYS show buttons regardless of balance
+    # Show withdrawal options with buttons - ALWAYS show both buttons
     from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
     
     keyboard = InlineKeyboardMarkup()
     
-    # Leader Card option (minimum $2)
-    if balance >= 2.0:
-        keyboard.add(InlineKeyboardButton(
-            f"💳 Leader Card (Min: $2) - Available", 
-            callback_data="withdraw_leader_card"
-        ))
-    else:
-        keyboard.add(InlineKeyboardButton(
-            f"💳 Leader Card (Min: $2) - Need ${2.0 - balance:.2f} more", 
-            callback_data="withdraw_insufficient_leader"
-        ))
+    # Always show both buttons regardless of balance
+    keyboard.add(InlineKeyboardButton(
+        "💳 Leader Card (Min: $2)", 
+        callback_data="withdraw_leader_card"
+    ))
     
-    # Binance Pay ID option (minimum $5)
-    if balance >= 5.0:
-        keyboard.add(InlineKeyboardButton(
-            f"💰 Binance Pay ID (Min: $5) - Available", 
-            callback_data="withdraw_binance"
-        ))
-    else:
-        keyboard.add(InlineKeyboardButton(
-            f"💰 Binance Pay ID (Min: $5) - Need ${5.0 - balance:.2f} more", 
-            callback_data="withdraw_insufficient_binance"
-        ))
+    keyboard.add(InlineKeyboardButton(
+        "💰 Binance Pay ID (Min: $5)", 
+        callback_data="withdraw_binance"
+    ))
     
     # Cancel button
     keyboard.add(InlineKeyboardButton("❌ Cancel", callback_data="withdraw_cancel"))
     
-    print(f"🔍 DEBUG: Created keyboard with {len(keyboard.keyboard)} rows")
-    
     # Send withdrawal options message
     withdrawal_msg = get_text('withdrawal_options', user_language, balance=balance)
-    print(f"🔍 DEBUG: Withdrawal message: {withdrawal_msg}")
-    
-    try:
-        bot.send_message(message.chat.id, withdrawal_msg, reply_markup=keyboard, parse_mode="Markdown")
-        print(f"🔍 DEBUG: Message sent successfully!")
-    except Exception as e:
-        print(f"🔍 DEBUG: Error sending message: {e}")
-        # Try without markdown
-        bot.send_message(message.chat.id, withdrawal_msg, reply_markup=keyboard)
+    bot.send_message(message.chat.id, withdrawal_msg, reply_markup=keyboard, parse_mode="Markdown")
 
 # Callback handler for withdrawal option selection
 @bot.callback_query_handler(func=lambda call: call.data.startswith('withdraw_'))
@@ -127,13 +97,8 @@ def handle_withdrawal_callback(call):
             clear_withdraw_state(user_id)
             return
         
-        elif action == 'insufficient_leader' or action == 'insufficient_binance':
-            # User clicked on insufficient balance option
-            bot.answer_callback_query(call.id, "❌ Insufficient balance for this option")
-            return
-        
         elif action == 'leader_card':
-            # User selected Leader Card withdrawal
+            # User selected Leader Card withdrawal - check balance here
             error_msg = check_withdraw_conditions(user_id, balance, 'leader_card', user_language)
             if error_msg:
                 bot.answer_callback_query(call.id, f"❌ {error_msg}")
@@ -156,7 +121,7 @@ def handle_withdrawal_callback(call):
             bot.answer_callback_query(call.id, "💳 Enter your leader card name")
         
         elif action == 'binance':
-            # User selected Binance Pay ID withdrawal
+            # User selected Binance Pay ID withdrawal - check balance here
             error_msg = check_withdraw_conditions(user_id, balance, 'binance', user_language)
             if error_msg:
                 bot.answer_callback_query(call.id, f"❌ {error_msg}")
