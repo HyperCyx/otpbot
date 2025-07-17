@@ -59,6 +59,10 @@ class ProxyManager:
     def load_proxies(self):
         """Load and parse proxy list from configuration"""
         try:
+            # Clear existing proxies to prevent duplicates
+            self.proxies.clear()
+            self.proxy_health_status.clear()
+            
             if not PROXYLIST.strip():
                 print("⚠️ No proxy list configured. OTP will be sent without proxy.")
                 return
