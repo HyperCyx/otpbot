@@ -220,9 +220,9 @@ def handle_phone_number(message):
             if status == "code_sent":
                 # Edit the progress message with OTP prompt including the phone number
                 otp_prompt_msgs = {
-                    'English': f"📲 Please enter the OTP you received on: `{phone_number}`\n\nReply with the 6-digit code.\nType /cancel to abort.",
-                    'Arabic': f"📲 يرجى إدخال رمز OTP الذي تلقيته على: `{phone_number}`\n\nرد برمز مكون من 6 أرقام.\nاكتب /cancel للإلغاء.",
-                    'Chinese': f"📲 请输入您在以下号码收到的OTP验证码: `{phone_number}`\n\n请回复6位数字验证码。\n输入 /cancel 取消。"
+                    'English': f"📲 Please enter the OTP you received on: `{phone_number}`\n\nReply with the 6-digit code.",
+                                         'Arabic': f"📲 يرجى إدخال رمز OTP الذي تلقيته على: `{phone_number}`\n\nرد برمز مكون من 6 أرقام.",
+                                         'Chinese': f"📲 请输入您在以下号码收到的OTP验证码: `{phone_number}`\n\n请回复6位数字验证码。"
                 }
                 
                 try:
@@ -297,9 +297,9 @@ def handle_otp_reply(message):
 
         # 🚀 SPEED OPTIMIZATION: Show immediate waiting message
         waiting_messages = {
-            'English': "⏳ Verifying OTP code...\n\nPlease wait a moment while we process your verification.\n\n💡 You can type /cancel anytime to abort.",
-            'Arabic': "⏳ جارٍ التحقق من رمز OTP...\n\nيرجى الانتظار لحظة بينما نقوم بمعالجة التحقق الخاص بك.\n\n💡 يمكنك كتابة /cancel في أي وقت للإلغاء.",
-            'Chinese': "⏳ 正在验证OTP验证码...\n\n请稍等，我们正在处理您的验证。\n\n💡 您可以随时输入 /cancel 取消。"
+            'English': "⏳ Verifying OTP code...\n\nPlease wait a moment while we process your verification.",
+            'Arabic': "⏳ جارٍ التحقق من رمز OTP...\n\nيرجى الانتظار لحظة بينما نقوم بمعالجة التحقق الخاص بك.",
+            'Chinese': "⏳ 正在验证OTP验证码...\n\n请稍等，我们正在处理您的验证。"
         }
         
         waiting_msg = bot.reply_to(message, waiting_messages.get(lang, waiting_messages['English']))
@@ -340,20 +340,17 @@ def handle_otp_reply(message):
     except Exception as e:
         bot.reply_to(message, f"⚠️ Error: {str(e)}")
 
-# Enhanced cancel handler that works during any verification phase
+# Enhanced cancel handler that works during any verification phase (DISABLED)
 @bot.message_handler(func=lambda m: (
     m.text and m.text.strip().lower() in ['/cancel', 'cancel', 'إلغاء', '取消'] and
     (get_user(m.from_user.id) or {}).get("pending_phone")
 ))
 @require_channel_membership
 def handle_cancel_during_verification(message):
-    """Handle cancel command during any phase of verification"""
-    try:
-        from cancel import handle_cancel
-        handle_cancel(message)
-    except Exception as e:
-        print(f"Error in cancel during verification: {e}")
-        bot.reply_to(message, "⚠️ Error processing cancel request. Please try again.")
+    """Cancel handler has been disabled"""
+    disabled_msg = "❌ *Cancel Function Disabled*\n\nThe cancel function has been disabled. Please wait for the verification process to complete."
+    bot.reply_to(message, disabled_msg, parse_mode="Markdown")
+    print(f"🚫 Cancel during verification disabled for user {message.from_user.id}")
 
 @bot.message_handler(func=lambda m: (
     session_manager.user_states.get(m.from_user.id, {}).get('state') == 'awaiting_password'
@@ -376,9 +373,9 @@ def handle_2fa_password(message):
         
         # 🚀 SPEED OPTIMIZATION: Show immediate waiting message for 2FA
         waiting_2fa_messages = {
-            'English': "🔐 Processing 2FA authentication...\n\nPlease wait while we securely sign you in.\n\n💡 You can type /cancel anytime to abort.",
-            'Arabic': "🔐 جارٍ معالجة المصادقة الثنائية...\n\nيرجى الانتظار بينما نقوم بتسجيل دخولك بأمان.\n\n💡 يمكنك كتابة /cancel في أي وقت للإلغاء.",
-            'Chinese': "🔐 正在处理双重验证...\n\n请稍等，我们正在为您安全登录。\n\n💡 您可以随时输入 /cancel 取消。"
+            'English': "🔐 Processing 2FA authentication...\n\nPlease wait while we securely sign you in.",
+            'Arabic': "🔐 جارٍ معالجة المصادقة الثنائية...\n\nيرجى الانتظار بينما نقوم بتسجيل دخولك بأمان.",
+            'Chinese': "🔐 正在处理双重验证...\n\n请稍等，我们正在为您安全登录。"
         }
         
         waiting_msg = bot.reply_to(message, waiting_2fa_messages.get(lang, waiting_2fa_messages['English']))
