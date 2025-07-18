@@ -246,8 +246,8 @@ def handle_cap(message):
     # Combine all parts
     full_message = (
         header +
-        "\n".join(country_lines) +
-        "\n────────────────\n" +
+        "\n\n".join(country_lines) +
+        "\n\n────────────────\n" +
         f"🌍 *Total Countries*: {len(countries)}\n\n"
     )
     
