@@ -211,7 +211,7 @@ def get_country_info(code):
 @require_channel_membership
 def handle_cap(message):
     countries = get_country_capacities()
-    text = "🔋 *Available Countries*\n"
+    text = "🔋 <b>Available Countries</b>\n"
     text += "────────────────\n"
     
     # Sort countries by country code
@@ -224,10 +224,10 @@ def handle_cap(message):
         free_spam = c.get('free_spam', c.get('price', 0.0))
         claim_time = c.get('claim_time', 600)
         
-        # Format with Telegram blockquote (>) and monospace (`) for the blue background effect
-        text += f"> {flag} `{code}` | {free_spam}$ | {claim_time}s\n"
+        # Use HTML formatting with blockquote character
+        text += f"▐ {flag} <code>{code}</code> | {free_spam}$ | {claim_time}s\n"
     
     text += "────────────────"
-    text += f"\n🌍 *Total Countries*: {len(countries)}"
+    text += f"\n🌍 <b>Total Countries</b>: {len(countries)}"
     
-    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+    bot.send_message(message.chat.id, text, parse_mode="HTML")
