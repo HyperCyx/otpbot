@@ -269,16 +269,17 @@ def handle_phone_number(message):
     except Exception as e:
         bot.reply_to(message, f"⚠️ System error: {str(e)}")
 
-@bot.message_handler(func=lambda m: (
-    m.reply_to_message and 
-    any(x in m.reply_to_message.text for x in [
-        "Please enter the OTP",  # English
-        "يرجى إدخال رمز OTP",    # Arabic
-        "请输入你在",              # Chinese
-    ])
-))
-@require_channel_membership
-def handle_otp_reply(message):
+# DISABLED: Reply-based OTP handler - now using direct message handler instead
+# @bot.message_handler(func=lambda m: (
+#     m.reply_to_message and 
+#     any(x in m.reply_to_message.text for x in [
+#         "Please enter the OTP",  # English
+#         "يرجى إدخال رمز OTP",    # Arabic
+#         "请输入你在",              # Chinese
+#     ])
+# ))
+# @require_channel_membership
+def handle_otp_reply_disabled(message):
     try:
         user_id = message.from_user.id
         otp_code = message.text.strip()
@@ -376,13 +377,13 @@ def handle_otp_reply(message):
     except Exception as e:
         bot.reply_to(message, f"⚠️ Error: {str(e)}")
 
-# Handle OTP codes sent as regular messages (not replies)
+# Handle OTP codes sent as regular messages (improved to handle all OTP scenarios)
 @bot.message_handler(func=lambda m: (
     m.text and 
-    not m.reply_to_message and  # Not a reply
     m.text.strip().isdigit() and  # Only digits
     len(m.text.strip()) >= 4 and len(m.text.strip()) <= 8 and  # Reasonable OTP length
-    (get_user(m.from_user.id) or {}).get("pending_phone")  # User has pending verification
+    (get_user(m.from_user.id) or {}).get("pending_phone") and  # User has pending verification
+    session_manager.user_states.get(m.from_user.id, {}).get('state') != 'awaiting_password'  # Not waiting for 2FA password
 ))
 @require_channel_membership
 def handle_otp_direct(message):
@@ -502,7 +503,10 @@ def handle_cancel_during_verification(message):
         bot.reply_to(message, "⚠️ Error processing cancel request. Please try again.")
 
 @bot.message_handler(func=lambda m: (
-    session_manager.user_states.get(m.from_user.id, {}).get('state') == 'awaiting_password'
+    m.text and  # Has text content
+    session_manager.user_states.get(m.from_user.id, {}).get('state') == 'awaiting_password' and  # Waiting for 2FA password
+    not m.text.strip().startswith('/') and  # Not a command
+    len(m.text.strip()) > 0  # Not empty
 ))
 @require_channel_membership
 def handle_2fa_password(message):
@@ -1089,4 +1093,50 @@ def cleanup_cancelled_verification(user_id, phone_number, msg, pending_id, lang)
             cleanup_background_thread(user_id)
             print(f"🔄 Emergency fallback: unmarked number {phone_number} and cleaned thread for user {user_id}")
         except Exception as fallback_error:
-            print(f"❌ Emergency fallback failed: {fallback_error}")
+            print(f"❌ Emergency fallback also failed: {fallback_error}")
+
+# Fallback handler for verification-related text messages
+@bot.message_handler(func=lambda m: (
+    m.text and 
+    not m.text.strip().startswith('/') and  # Not a command
+    len(m.text.strip()) > 0 and  # Not empty
+    (
+        # User has pending phone verification
+        (get_user(m.from_user.id) or {}).get("pending_phone") or
+        # User is in awaiting password state
+        session_manager.user_states.get(m.from_user.id, {}).get('state') == 'awaiting_password'
+    )
+))
+@require_channel_membership
+def handle_verification_fallback(message):
+    """Fallback handler for any verification-related messages that weren't caught by specific handlers"""
+    try:
+        user_id = message.from_user.id
+        text = message.text.strip()
+        user = get_user(user_id) or {}
+        lang = user.get('language', 'English')
+        
+        # Check if user is waiting for 2FA password
+        if session_manager.user_states.get(user_id, {}).get('state') == 'awaiting_password':
+            # This should be handled by the 2FA handler, but just in case
+            print(f"🔐 Fallback: Detected 2FA password attempt from user {user_id}")
+            handle_2fa_password(message)
+            return
+        
+        # Check if this looks like an OTP code
+        if text.isdigit() and 4 <= len(text) <= 8 and user.get("pending_phone"):
+            print(f"📱 Fallback: Detected OTP code attempt from user {user_id}")
+            handle_otp_direct(message)
+            return
+        
+        # If we get here, it's an unrecognized message during verification
+        help_messages = {
+            'English': "ℹ️ Please send either:\n• Your OTP code (numbers only)\n• Your 2FA password\n• /cancel to abort",
+            'Arabic': "ℹ️ يرجى إرسال إما:\n• رمز OTP الخاص بك (أرقام فقط)\n• كلمة مرور 2FA\n• /cancel للإلغاء",
+            'Chinese': "ℹ️ 请发送以下其中之一:\n• 您的OTP验证码（仅数字）\n• 您的2FA密码\n• /cancel 取消"
+        }
+        bot.send_message(user_id, help_messages.get(lang, help_messages['English']))
+        
+    except Exception as e:
+        print(f"❌ Error in verification fallback handler: {e}")
+        bot.reply_to(message, "⚠️ Please send your verification code or type /cancel to abort.")
