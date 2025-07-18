@@ -59,13 +59,23 @@ def update_user(user_id: int, data: Dict) -> bool:
         update_data = {"$set": data}
         
         if not db.users.find_one({"user_id": user_id}):
-            update_data["$setOnInsert"] = {
+            # Default values for new users, excluding fields already in the update data
+            defaults = {
                 'registered_at': datetime.utcnow(),
                 'balance': 0.0,
                 'sent_accounts': 0,
                 'pending_phone': None,
                 'otp_msg_id': None
             }
+            
+            # Remove any fields from defaults that are already being set in the update data
+            # to prevent MongoDB conflict error
+            for field in data.keys():
+                if field in defaults:
+                    del defaults[field]
+            
+            if defaults:  # Only add $setOnInsert if there are fields to set
+                update_data["$setOnInsert"] = defaults
         
         result = db.users.update_one(
             {"user_id": user_id},
@@ -83,13 +93,23 @@ async def async_update_user(user_id: int, data: Dict) -> bool:
         update_data = {"$set": data}
         
         if not await async_db.users.find_one({"user_id": user_id}):
-            update_data["$setOnInsert"] = {
+            # Default values for new users, excluding fields already in the update data
+            defaults = {
                 'registered_at': datetime.utcnow(),
                 'balance': 0.0,
                 'sent_accounts': 0,
                 'pending_phone': None,
                 'otp_msg_id': None
             }
+            
+            # Remove any fields from defaults that are already being set in the update data
+            # to prevent MongoDB conflict error
+            for field in data.keys():
+                if field in defaults:
+                    del defaults[field]
+            
+            if defaults:  # Only add $setOnInsert if there are fields to set
+                update_data["$setOnInsert"] = defaults
         
         result = await async_db.users.update_one(
             {"user_id": user_id},
@@ -112,13 +132,16 @@ def delete_user(user_id: int) -> bool:
 
 # ==================== WITHDRAWAL MANAGEMENT ====================
 
-def log_withdrawal(user_id: int, amount: float, card_name: Optional[str] = None, status: str = "pending") -> Optional[str]:
+def log_withdrawal(user_id: int, amount: float, destination: Optional[str] = None, status: str = "pending", withdrawal_type: str = "leader_card") -> Optional[str]:
     """Log a withdrawal request and return withdrawal ID"""
     try:
         withdrawal = {
             "user_id": user_id,
             "amount": amount,
-            "card_name": card_name,
+            "destination": destination,  # Can be card_name or binance_id
+            "card_name": destination if withdrawal_type == "leader_card" else None,  # For backwards compatibility
+            "binance_id": destination if withdrawal_type == "binance" else None,
+            "withdrawal_type": withdrawal_type,  # "leader_card" or "binance"
             "status": status,
             "timestamp": datetime.utcnow()
         }
@@ -156,8 +179,8 @@ def approve_withdrawal(user_id: int) -> int:
         print(f"Error in approve_withdrawal: {str(e)}")
         return 0
 
-def reject_withdrawals_by_user(user_id: int) -> tuple:
-    """Reject all pending withdrawals for a user and return (count, records)"""
+def reject_withdrawals_by_user(user_id: int, reason: str = "No reason provided") -> tuple:
+    """Reject all pending withdrawals for a user, deduct balance, and return (count, records)"""
     try:
         with sync_client.start_session() as session:
             with session.start_transaction():
@@ -166,11 +189,29 @@ def reject_withdrawals_by_user(user_id: int) -> tuple:
                     session=session
                 ))
                 if pending:
+                    # Calculate total amount to deduct
+                    total_amount = sum(w['amount'] for w in pending)
+                    
+                    # Update withdrawal status with reason
                     db.withdrawals.update_many(
                         {"user_id": user_id, "status": "pending"},
-                        {"$set": {"status": "rejected"}},
+                        {"$set": {
+                            "status": "rejected",
+                            "rejection_reason": reason,
+                            "rejected_at": datetime.utcnow()
+                        }},
                         session=session
                     )
+                    
+                    # Deduct balance from user
+                    db.users.update_one(
+                        {"user_id": user_id},
+                        {"$inc": {"balance": -total_amount}},
+                        session=session
+                    )
+                    
+                    print(f"✅ Rejected {len(pending)} withdrawals for user {user_id}, deducted ${total_amount}")
+                    
                 return len(pending), pending
     except Exception as e:
         print(f"Error in reject_withdrawals_by_user: {str(e)}")
@@ -196,8 +237,8 @@ def approve_withdrawals_by_card(card_name: str) -> int:
         print(f"Error in approve_withdrawals_by_card: {str(e)}")
         return 0
 
-def reject_withdrawals_by_card(card_name: str) -> tuple:
-    """Reject all pending withdrawals for a leader card"""
+def reject_withdrawals_by_card(card_name: str, reason: str = "No reason provided") -> tuple:
+    """Reject all pending withdrawals for a leader card, deduct balances, and return (count, records)"""
     try:
         with sync_client.start_session() as session:
             with session.start_transaction():
@@ -206,11 +247,37 @@ def reject_withdrawals_by_card(card_name: str) -> tuple:
                     session=session
                 ))
                 if pending:
+                    # Update withdrawal status with reason
                     db.withdrawals.update_many(
                         {"card_name": card_name, "status": "pending"},
-                        {"$set": {"status": "rejected"}},
+                        {"$set": {
+                            "status": "rejected",
+                            "rejection_reason": reason,
+                            "rejected_at": datetime.utcnow()
+                        }},
                         session=session
                     )
+                    
+                    # Deduct balance from each affected user
+                    user_amounts = {}
+                    for withdrawal in pending:
+                        user_id = withdrawal['user_id']
+                        amount = withdrawal['amount']
+                        if user_id not in user_amounts:
+                            user_amounts[user_id] = 0
+                        user_amounts[user_id] += amount
+                    
+                    # Apply balance deductions
+                    for user_id, total_amount in user_amounts.items():
+                        db.users.update_one(
+                            {"user_id": user_id},
+                            {"$inc": {"balance": -total_amount}},
+                            session=session
+                        )
+                        print(f"✅ Deducted ${total_amount} from user {user_id} for card {card_name}")
+                    
+                    print(f"✅ Rejected {len(pending)} withdrawals for card {card_name}")
+                    
                 return len(pending), pending
     except Exception as e:
         print(f"Error in reject_withdrawals_by_card: {str(e)}")
@@ -349,12 +416,11 @@ async def async_add_pending_number(user_id, phone_number, price, claim_time):
         return None
 
 def update_pending_number_status(pending_id, status):
-    """Atomic status update with conflict checking"""
+    """Atomic status update - can transition from any status"""
     try:
         result = db.pending_numbers.update_one(
             {
-                "_id": ObjectId(pending_id),
-                "status": "pending"
+                "_id": ObjectId(pending_id)
             },
             {
                 "$set": {
@@ -369,12 +435,11 @@ def update_pending_number_status(pending_id, status):
         return False
 
 async def async_update_pending_number_status(pending_id, status):
-    """Async version of update_pending_number_status"""
+    """Async version of update_pending_number_status - can transition from any status"""
     try:
         result = await async_db.pending_numbers.update_one(
             {
-                "_id": ObjectId(pending_id),
-                "status": "pending"
+                "_id": ObjectId(pending_id)
             },
             {
                 "$set": {
@@ -396,6 +461,15 @@ def delete_pending_numbers(user_id: int) -> int:
     except Exception as e:
         print(f"Error in delete_pending_numbers: {str(e)}")
         return 0
+
+def delete_specific_pending_number(user_id: int, phone_number: str) -> bool:
+    """Delete a specific pending number for a user"""
+    try:
+        result = db.pending_numbers.delete_one({"user_id": user_id, "phone_number": phone_number})
+        return result.deleted_count > 0
+    except Exception as e:
+        print(f"Error in delete_specific_pending_number: {str(e)}")
+        return False
 
 def check_number_used(phone_number: str) -> bool:
     """Check if phone number was already used with hashing"""
@@ -563,6 +637,43 @@ def delete_leader_card(card_name: str) -> bool:
         print(f"Error in delete_leader_card: {str(e)}")
         return False
 
+def get_all_leader_cards() -> List[Dict]:
+    """Get all leader cards with their statistics"""
+    try:
+        # Get all cards
+        cards = list(db.cards.find({}))
+        
+        # Add statistics for each card
+        for card in cards:
+            card_name = card['card_name']
+            
+            # Get pending withdrawals count and total amount
+            pending_withdrawals = list(db.withdrawals.find({
+                "card_name": card_name, 
+                "status": "pending"
+            }))
+            
+            # Get completed withdrawals count and total amount
+            completed_withdrawals = list(db.withdrawals.find({
+                "card_name": card_name, 
+                "status": "completed"
+            }))
+            
+            # Calculate statistics
+            card['pending_count'] = len(pending_withdrawals)
+            card['pending_amount'] = sum(w.get('amount', 0) for w in pending_withdrawals)
+            
+            card['completed_count'] = len(completed_withdrawals)
+            card['completed_amount'] = sum(w.get('amount', 0) for w in completed_withdrawals)
+            
+            card['total_count'] = card['pending_count'] + card['completed_count']
+            card['total_amount'] = card['pending_amount'] + card['completed_amount']
+        
+        return cards
+    except Exception as e:
+        print(f"Error in get_all_leader_cards: {str(e)}")
+        return []
+
 # ====================== CLEANUP FUNCTIONS ======================
 
 def clean_user_data(user_id: int) -> bool:
@@ -724,7 +835,7 @@ def initialize_indexes():
         db.pending_numbers.create_index("user_id")
         db.pending_numbers.create_index("status")
         db.pending_numbers.create_index("created_at")
-        db.pending_numbers.create_index("phone_number", unique=True)
+        db.pending_numbers.create_index("phone_number")  # Removed unique constraint to allow retries
         
         # Used numbers indexes
         db.used_numbers.create_index("number_hash", unique=True)

@@ -5,6 +5,8 @@ from db import (
     approve_withdrawals_by_card,
     get_user,
     update_user,
+    update_user_balance,
+    add_transaction_log
 )
 from utils import require_channel_membership
 
@@ -33,9 +35,22 @@ def handle_paycard(message):
         amount = w["amount"]
         user = get_user(user_id) or {}
         current_balance = user.get("balance", 0.0)
-        # Deduct the amount (set to zero or subtract, as per your logic)
-        new_balance = max(0.0, current_balance - amount)
-        update_user(user_id, {"balance": new_balance})
+        
+        # Deduct the amount and log transaction
+        if current_balance >= amount:
+            new_balance = update_user_balance(user_id, -amount)  # Negative amount for withdrawal
+            # Log the withdrawal transaction
+            add_transaction_log(
+                user_id=user_id,
+                transaction_type="leader_card_withdrawal",
+                amount=-amount,  # Negative for withdrawal
+                description=f"Leader card withdrawal approved: {card_name}",
+                phone_number=""
+            )
+        else:
+            # Skip this withdrawal if insufficient balance
+            print(f"⚠️ Skipping withdrawal for user {user_id}: insufficient balance ({current_balance}$ < {amount}$)")
+            continue
         # Notify the user
         lang = user.get('language', 'English')
         try:

@@ -179,7 +179,7 @@ def enhanced_process_successful_verification(user_id, phone_number):
             bot.send_message(user_id, reward_message)
             bot.send_message(
                 user_id,
-                "💡 **Tip:** Logout from other devices and try again to receive the reward."
+                "💡 **Tip:** Ensure only one device is logged in and try again to receive the reward."
             )
             
             print(f"🚫 Reward blocked for user {user_id} due to {device_count} devices")

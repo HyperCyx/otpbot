@@ -18,6 +18,7 @@ import pay
 import card
 import paycard
 import cardw
+import viewcard
 import rejectpayment
 import admin
 import notice
@@ -27,6 +28,7 @@ import admin_sessions
 import admin_delete_sessions
 import device_sessions
 import admin_device_check
+import session_cleanup
 import threading
 from flask import Flask, jsonify
 
@@ -48,10 +50,15 @@ def main():
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     
+    # Session cleanup is disabled by default - admin must enable it
+    print("🧹 Session cleanup is DISABLED by default - use /enablecleanup to turn it on")
+    
     try:
         bot.infinity_polling()
     except Exception as e:
         print(f"Bot crashed: {str(e)}")
+        # Stop session cleanup on shutdown if running
+        session_cleanup.stop_session_cleanup()
         # Add any cleanup or restart logic here
 
 if __name__ == "__main__":

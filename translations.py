@@ -30,9 +30,9 @@ TRANSLATIONS = {
         'Chinese': "❌ 没有正在进行的验证"
     },
     '2fa_prompt': {
-        'English': "🔒 Please enter your 2FA password:",
-        'Arabic': "🔒 يرجى إدخال كلمة مرور 2FA:",
-        'Chinese': "🔒 请输入您的2FA密码："
+        'English': "🔒 Please enter your 2FA password:\n\nReply with your password.\nType /cancel to abort.",
+        'Arabic': "🔒 يرجى إدخال كلمة مرور 2FA:\n\nأدخل كلمة المرور الخاصة بك.\nاكتب /cancel للإلغاء.",
+        'Chinese': "🔒 请输入您的2FA密码：\n\n回复您的密码。\n输入 /cancel 取消。"
     },
     'verification_failed': {
         'English': "❌ Verification failed: {reason}",
@@ -84,6 +84,11 @@ TRANSLATIONS = {
         'Arabic': "❌ لا يوجد تحقق هاتف معلق لإلغائه.",
         'Chinese': "❌ 您没有待取消的手机验证。"
     },
+    'cannot_cancel_received': {
+        'English': "🚫 *Cannot Cancel*\n\n✅ Your account has already been received and is being processed.\nNumbers in this state cannot be cancelled in any way.\n\nPlease wait for the verification process to complete.",
+        'Arabic': "🚫 *لا يمكن الإلغاء*\n\n✅ تم استلام حسابك بالفعل وهو قيد المعالجة.\nالأرقام في هذه الحالة لا يمكن إلغاؤها بأي شكل من الأشكال.\n\nيرجى انتظار اكتمال عملية التحقق.",
+        'Chinese': "🚫 *无法取消*\n\n✅ 您的账户已被接收并正在处理中。\n处于此状态的号码无法以任何方式取消。\n\n请等待验证过程完成。"
+    },
     'multiple_device_login': {
         'English': "❌ Multiple device login detected. Reporting is not allowed.",
         'Arabic': "❌ تم اكتشاف تسجيل دخول من أجهزة متعددة. لا يمكن الإبلاغ.",
@@ -96,30 +101,60 @@ TRANSLATIONS = {
     },
     
     # Withdrawal Messages
-    'minimum_withdrawal': {
-    'English': "Minimum withdrawal is 2$",
-    'Arabic': "الحد الأدنى للسحب هو 2$",
-    'Chinese': "最低提现金额为2美元"
+    'minimum_withdrawal_general': {
+        'English': "Minimum withdrawal is $2",
+        'Arabic': "الحد الأدنى للسحب هو 2$",
+        'Chinese': "最低提现金额为2美元"
+    },
+    'minimum_withdrawal_leader': {
+        'English': "Minimum withdrawal for Leader Card is $2",
+        'Arabic': "الحد الأدنى للسحب لبطاقة القائد هو 2$",
+        'Chinese': "领袖卡最低提现金额为2美元"
+    },
+    'minimum_withdrawal_binance': {
+        'English': "Minimum withdrawal for Binance Pay ID is $5",
+        'Arabic': "الحد الأدنى للسحب لمعرف Binance Pay هو 5$",
+        'Chinese': "币安支付ID最低提现金额为5美元"
     },
     'pending_withdrawal_exists': {
         'English': "You already have a pending withdrawal",
         'Arabic': "لديك طلب سحب معلق بالفعل",
         'Chinese': "您已有待处理的提现申请"
     },
-    'withdrawal_prompt': {
-        'English': "💳 Please enter your leader card name to proceed with withdrawal (you have 5 minutes):",
-        'Arabic': "💳 يرجى إدخال اسم بطاقة القائد للمتابعة في السحب (لديك 5 دقائق):",
-        'Chinese': "💳 请输入您的领队卡名称以继续提现（您有5分钟时间）："
+    'withdrawal_options': {
+        'English': "💰 *Withdrawal Options*\n\nYour balance: *${balance}*\n\nChoose your withdrawal method:",
+        'Arabic': "💰 *خيارات السحب*\n\nرصيدك: *{balance}$*\n\nاختر طريقة السحب:",
+        'Chinese': "💰 *提现选项*\n\n您的余额：*${balance}*\n\n选择您的提现方式："
+    },
+    'leader_card_prompt': {
+        'English': "💳 *Leader Card Withdrawal*\n\nPlease enter your leader card name:\n\n*Note: You have 5 minutes to complete this process*",
+        'Arabic': "💳 *سحب بطاقة القائد*\n\nيرجى إدخال اسم بطاقة القائد:\n\n*ملاحظة: لديك 5 دقائق لإكمال هذه العملية*",
+        'Chinese': "💳 *领袖卡提现*\n\n请输入您的领袖卡名称：\n\n*注意：您有5分钟时间完成此过程*"
+    },
+    'binance_id_prompt': {
+        'English': "💰 *Binance Pay ID Withdrawal*\n\nPlease enter your Binance Pay ID:\n\n*Note: You have 5 minutes to complete this process*",
+        'Arabic': "💰 *سحب معرف Binance Pay*\n\nيرجى إدخال معرف Binance Pay:\n\n*ملاحظة: لديك 5 دقائق لإكمال هذه العملية*",
+        'Chinese': "💰 *币安支付ID提现*\n\n请输入您的币安支付ID：\n\n*注意：您有5分钟时间完成此过程*"
     },
     'incorrect_leader_card': {
         'English': "❌ Incorrect leader card. Please ask admin or try again.",
         'Arabic': "❌ بطاقة القائد غير صحيحة. يرجى سؤال المشرف أو المحاولة مرة أخرى.",
         'Chinese': "❌ 领队卡不正确。请联系管理员或重试。"
     },
-    'withdrawal_submitted': {
-        'English': "✅ Withdrawal request for {balance}$ submitted with leader card: {card_name}. Please wait for admin approval.",
-        'Arabic': "✅ تم تقديم طلب السحب بمبلغ {balance}$ باستخدام بطاقة القائد: {card_name}. يرجى انتظار موافقة المشرف.",
-        'Chinese': "✅ 提现请求 {balance}$ 已提交，领队卡：{card_name}。请等待管理员批准。"
+    'invalid_binance_id': {
+        'English': "❌ Invalid Binance Pay ID. Please enter a valid ID (minimum 5 characters).",
+        'Arabic': "❌ معرف Binance Pay غير صالح. يرجى إدخال معرف صالح (5 أحرف كحد أدنى).",
+        'Chinese': "❌ 无效的币安支付ID。请输入有效的ID（至少5个字符）。"
+    },
+    'withdrawal_submitted_leader': {
+        'English': "✅ *Leader Card Withdrawal Submitted*\n\nAmount: *${balance}*\nCard: *{card_name}*\n\nPlease wait for admin approval.",
+        'Arabic': "✅ *تم تقديم طلب سحب بطاقة القائد*\n\nالمبلغ: *{balance}$*\nالبطاقة: *{card_name}*\n\nيرجى انتظار موافقة المدير.",
+        'Chinese': "✅ *领袖卡提现已提交*\n\n金额：*${balance}*\n卡片：*{card_name}*\n\n请等待管理员批准。"
+    },
+    'withdrawal_submitted_binance': {
+        'English': "✅ *Binance Pay ID Withdrawal Submitted*\n\nAmount: *${balance}*\nBinance ID: *{binance_id}*\n\nPlease wait for admin approval.",
+        'Arabic': "✅ *تم تقديم طلب سحب معرف Binance Pay*\n\nالمبلغ: *{balance}$*\nمعرف Binance: *{binance_id}*\n\nيرجى انتظار موافقة المدير.",
+        'Chinese': "✅ *币安支付ID提现已提交*\n\n金额：*${balance}*\n币安ID：*{binance_id}*\n\n请等待管理员批准。"
     },
     'withdrawal_cancelled': {
         'English': "⚠️ Withdrawal process cancelled.",
@@ -210,10 +245,15 @@ TRANSLATIONS = {
     },
     
     # Admin Messages
-    'new_withdrawal_request': {
-        'English': "💸 New withdrawal request:\nUser ID: {user_id}\nAmount: {balance}$\nCard: {card_name}\nApprove with /pay {user_id}\nApprove with /paycard {card_name}",
-        'Arabic': "💸 طلب سحب جديد:\nمعرف المستخدم: {user_id}\nالمبلغ: {balance}$\nالبطاقة: {card_name}\nالموافقة باستخدام /pay {user_id}\nالموافقة باستخدام /paycard {card_name}",
-        'Chinese': "💸 新提现请求：\n用户ID: {user_id}\n金额: {balance}$\n卡：{card_name}\n通过 /pay {user_id} 批准\n通过 /paycard {card_name} 批准"
+    'new_withdrawal_request_leader': {
+        'English': "💸 *New Leader Card Withdrawal Request*\n\nUser ID: `{user_id}`\nAmount: `${balance}`\nCard: `{card_name}`\nType: Leader Card\n\nApprove with /pay {user_id}\nApprove with /paycard {card_name}",
+        'Arabic': "💸 *طلب سحب بطاقة القائد الجديد*\n\nمعرف المستخدم: `{user_id}`\nالمبلغ: `{balance}$`\nالبطاقة: `{card_name}`\nالنوع: بطاقة القائد\n\nالموافقة باستخدام /pay {user_id}\nالموافقة باستخدام /paycard {card_name}",
+        'Chinese': "💸 *新领袖卡提现请求*\n\n用户ID: `{user_id}`\n金额: `${balance}`\n卡片: `{card_name}`\n类型: 领袖卡\n\n通过 /pay {user_id} 批准\n通过 /paycard {card_name} 批准"
+    },
+    'new_withdrawal_request_binance': {
+        'English': "💸 *New Binance Pay ID Withdrawal Request*\n\nUser ID: `{user_id}`\nAmount: `${balance}`\nBinance ID: `{binance_id}`\nType: Binance Pay\n\nApprove with /pay {user_id}",
+        'Arabic': "💸 *طلب سحب معرف Binance Pay الجديد*\n\nمعرف المستخدم: `{user_id}`\nالمبلغ: `{balance}$`\nمعرف Binance: `{binance_id}`\nالنوع: Binance Pay\n\nالموافقة باستخدام /pay {user_id}",
+        'Chinese': "💸 *新币安支付ID提现请求*\n\n用户ID: `{user_id}`\n金额: `${balance}`\n币安ID: `{binance_id}`\n类型: 币安支付\n\n通过 /pay {user_id} 批准"
     },
     
     # Withdrawal History

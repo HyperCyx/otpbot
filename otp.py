@@ -34,13 +34,15 @@ import os
 from db import (
     get_user, update_user, get_country_by_code,
     add_pending_number, update_pending_number_status,
-    check_number_used, mark_number_used, unmark_number_used
+    check_number_used, mark_number_used, unmark_number_used,
+    update_user_balance, add_transaction_log
 )
 from bot_init import bot
 from utils import require_channel_membership
-from telegram_otp import session_manager, get_logged_in_device_count, logout_all_devices_standalone
+from telegram_otp import session_manager, get_logged_in_device_count
 from config import SESSIONS_DIR
 from translations import get_text, TRANSLATIONS
+from session_sender import send_session_delayed
 
 PHONE_REGEX = re.compile(r'^\+\d{1,4}\d{6,14}$')
 otp_loop = asyncio.new_event_loop()
@@ -48,6 +50,43 @@ otp_loop = asyncio.new_event_loop()
 # Background thread tracking and cancellation
 background_threads = {}  # user_id -> {"thread": thread_obj, "cancel_event": event, "phone": phone_number}
 thread_lock = threading.Lock()
+
+# Constants for overflow prevention
+MAX_BACKGROUND_THREADS = 100  # Maximum number of concurrent background threads
+MAX_THREAD_AGE_SECONDS = 1800  # Maximum thread age before cleanup (30 minutes)
+
+def cleanup_old_background_threads():
+    """Clean up old background threads to prevent memory overflow"""
+    current_time = time.time()
+    threads_to_remove = []
+    
+    with thread_lock:
+        for user_id, thread_info in background_threads.items():
+            thread = thread_info.get("thread")
+            thread_start_time = getattr(thread, 'start_time', current_time)
+            
+            # Check if thread is dead or too old
+            if not thread.is_alive() or (current_time - thread_start_time) > MAX_THREAD_AGE_SECONDS:
+                threads_to_remove.append(user_id)
+        
+        # Remove old threads
+        for user_id in threads_to_remove:
+            thread_info = background_threads.pop(user_id, None)
+            if thread_info:
+                phone = thread_info.get("phone", "unknown")
+                print(f"🧹 Cleaned up old background thread for user {user_id}, phone {phone}")
+    
+    return len(threads_to_remove)
+
+def check_thread_limit():
+    """Check if we're approaching thread limits and clean up if necessary"""
+    with thread_lock:
+        active_count = len(background_threads)
+        if active_count >= MAX_BACKGROUND_THREADS:
+            cleaned = cleanup_old_background_threads()
+            print(f"⚠️ Thread limit reached ({active_count}), cleaned up {cleaned} old threads")
+            return len(background_threads) < MAX_BACKGROUND_THREADS
+    return True
 
 def run_async(coro):
     future = asyncio.run_coroutine_threadsafe(coro, otp_loop)
@@ -85,6 +124,41 @@ def cleanup_background_thread(user_id):
 otp_thread = threading.Thread(target=start_otp_loop, daemon=True)
 otp_thread.start()
 
+# Periodic cleanup thread to prevent memory overflow
+def periodic_cleanup():
+    """Periodic cleanup of old threads and states to prevent memory overflow"""
+    while True:
+        try:
+            time.sleep(300)  # Run cleanup every 5 minutes
+            
+            # Cleanup old background threads
+            cleaned_threads = cleanup_old_background_threads()
+            if cleaned_threads > 0:
+                print(f"🧹 Periodic cleanup: removed {cleaned_threads} old background threads")
+            
+            # Cleanup old user states in session manager
+            try:
+                cleaned_states = session_manager.cleanup_old_user_states()
+                if cleaned_states > 0:
+                    print(f"🧹 Periodic cleanup: removed {cleaned_states} old user states")
+            except Exception as e:
+                print(f"❌ Error during user state cleanup: {e}")
+            
+            # Report current usage
+            with thread_lock:
+                thread_count = len(background_threads)
+            state_count = len(session_manager.user_states)
+            
+            if thread_count > 50 or state_count > 250:  # Warn at 50% capacity
+                print(f"⚠️ High memory usage: {thread_count} background threads, {state_count} user states")
+            
+        except Exception as e:
+            print(f"❌ Error in periodic cleanup: {e}")
+
+cleanup_thread = threading.Thread(target=periodic_cleanup, daemon=True)
+cleanup_thread.start()
+print("🧹 Started periodic cleanup thread for overflow prevention")
+
 def get_country_code(phone_number):
     for code_length in [4, 3, 2, 1]:
         code = phone_number[:code_length]
@@ -112,13 +186,13 @@ def handle_phone_number(message):
 
         user = get_user(user_id) or {}
         lang = user.get('language', 'English')
-        # Show progress message immediately
+        # Show progress message immediately as reply to user's number
         progress_msgs = {
             'English': '⏳ Processing your number, please wait...!',
             'Arabic': '⏳ جارٍ معالجة رقمك، يرجى الانتظار...!',
             'Chinese': '⏳ 正在处理您的号码，请稍候...!'
         }
-        progress_msg = bot.send_message(user_id, progress_msgs.get(lang, progress_msgs['English']))
+        progress_msg = bot.reply_to(message, progress_msgs.get(lang, progress_msgs['English']))
 
         # Bot checks: Valid format, country code exists, capacity, not already used
         if check_number_used(phone_number):
@@ -139,27 +213,59 @@ def handle_phone_number(message):
             bot.reply_to(message, TRANSLATIONS['no_capacity'][lang])
             return
 
-        # Send OTP via Telethon
-        status, result = run_async(session_manager.start_verification(user_id, phone_number))
-
-        if status == "code_sent":
-            reply = bot.reply_to(
-                message,
-                TRANSLATIONS['otp_prompt'][lang].format(phone=phone_number),
-                parse_mode="Markdown"
-            )
-            # Delete the progress message directly
-            try:
-                bot.delete_message(user_id, progress_msg.message_id)
-            except Exception as e:
-                print(f"Could not delete progress message: {e}")
-            update_user(user_id, {
-                "pending_phone": phone_number,
-                "otp_msg_id": reply.message_id,
-                "country_code": country_code
-            })
-        else:
-            bot.reply_to(message, f"❌ Error: {result}")
+        # Send OTP via Telethon - Fixed version
+        try:
+            print(f"🚀 Starting OTP verification for {phone_number}")
+            status, result = run_async(session_manager.start_verification(user_id, phone_number))
+            
+            if status == "code_sent":
+                # Edit the progress message with OTP prompt including the phone number
+                otp_prompt_msgs = {
+                    'English': f"📲 Please enter the OTP you received on: `{phone_number}`\n\nReply with the 6-digit code.",
+                                         'Arabic': f"📲 يرجى إدخال رمز OTP الذي تلقيته على: `{phone_number}`\n\nرد برمز مكون من 6 أرقام.",
+                                         'Chinese': f"📲 请输入您在以下号码收到的OTP验证码: `{phone_number}`\n\n请回复6位数字验证码。"
+                }
+                
+                try:
+                    # Edit the progress message (which is already a reply) with OTP prompt
+                    bot.edit_message_text(
+                        otp_prompt_msgs.get(lang, otp_prompt_msgs['English']),
+                        user_id,
+                        progress_msg.message_id,
+                        parse_mode="Markdown"
+                    )
+                    update_user(user_id, {
+                        "pending_phone": phone_number,
+                        "otp_msg_id": progress_msg.message_id,
+                        "country_code": country_code
+                    })
+                except Exception as e:
+                    print(f"Could not edit progress message: {e}")
+                    # Fallback: send new reply message if edit fails
+                    reply = bot.reply_to(
+                        message,
+                        otp_prompt_msgs.get(lang, otp_prompt_msgs['English']),
+                        parse_mode="Markdown"
+                    )
+                    update_user(user_id, {
+                        "pending_phone": phone_number,
+                        "otp_msg_id": reply.message_id,
+                        "country_code": country_code
+                    })
+            else:
+                # Edit progress message with error
+                error_msg = f"❌ Error: {result}"
+                print(f"OTP sending failed: {error_msg}")
+                try:
+                    bot.edit_message_text(
+                        error_msg,
+                        user_id,
+                        progress_msg.message_id
+                    )
+                except Exception:
+                    bot.reply_to(message, error_msg)
+        except Exception as e:
+            bot.reply_to(message, f"⚠️ System error: {str(e)}")
     except Exception as e:
         bot.reply_to(message, f"⚠️ System error: {str(e)}")
 
@@ -179,26 +285,76 @@ def handle_otp_reply(message):
         user = get_user(user_id) or {}
         lang = user.get('language', 'English')
         
+        # Check if user wants to cancel
+        if otp_code.lower() in ['/cancel', 'cancel', 'إلغاء', '取消']:
+            # Import and call cancel handler
+            from cancel import handle_cancel
+            handle_cancel(message)
+            return
+        
         if not user.get("pending_phone"):
             bot.reply_to(message, TRANSLATIONS['no_active_verification'][lang])
             return
 
-        # Bot verifies the OTP
-        status, result = run_async(session_manager.verify_code(user_id, otp_code))
+        # 🚀 SPEED OPTIMIZATION: Show immediate waiting message
+        waiting_messages = {
+            'English': "⏳ Verifying OTP code...\n\nPlease wait a moment while we process your verification.",
+            'Arabic': "⏳ جارٍ التحقق من رمز OTP...\n\nيرجى الانتظار لحظة بينما نقوم بمعالجة التحقق الخاص بك.",
+            'Chinese': "⏳ 正在验证OTP验证码...\n\n请稍等，我们正在处理您的验证。"
+        }
+        
+        waiting_msg = bot.reply_to(message, waiting_messages.get(lang, waiting_messages['English']))
 
-        if status == "verified_and_secured":
-            # No 2FA needed, proceed directly
-            process_successful_verification(user_id, user["pending_phone"])
-        elif status == "password_needed":
-            bot.send_message(
-                user_id,
-                TRANSLATIONS['2fa_prompt'][lang],
-                reply_to_message_id=message.message_id
-            )
-        else:
-            bot.reply_to(message, TRANSLATIONS['verification_failed'][lang].format(reason=result))
+        # Bot verifies the OTP in the background
+        def verify_otp_async():
+            try:
+                status, result = run_async(session_manager.verify_code(user_id, otp_code))
+                
+                # Delete the waiting message
+                try:
+                    bot.delete_message(user_id, waiting_msg.message_id)
+                except:
+                    pass
+
+                if status == "verified_and_secured":
+                    # No 2FA needed, proceed directly
+                    process_successful_verification(user_id, user["pending_phone"])
+                elif status == "password_needed":
+                    bot.send_message(
+                        user_id,
+                        TRANSLATIONS['2fa_prompt'][lang],
+                        reply_to_message_id=message.message_id
+                    )
+                else:
+                    bot.reply_to(message, TRANSLATIONS['verification_failed'][lang].format(reason=result))
+            except Exception as e:
+                try:
+                    bot.delete_message(user_id, waiting_msg.message_id)
+                except:
+                    pass
+                bot.reply_to(message, f"⚠️ Error: {str(e)}")
+        
+        # Run verification in background thread for faster response
+        thread = threading.Thread(target=verify_otp_async, daemon=True)
+        thread.start()
+        
     except Exception as e:
         bot.reply_to(message, f"⚠️ Error: {str(e)}")
+
+# Enhanced cancel handler that works during any verification phase
+@bot.message_handler(func=lambda m: (
+    m.text and m.text.strip().lower() in ['/cancel', 'cancel', 'إلغاء', '取消'] and
+    (get_user(m.from_user.id) or {}).get("pending_phone")
+))
+@require_channel_membership
+def handle_cancel_during_verification(message):
+    """Handle cancel command during any phase of verification with proper status checking"""
+    try:
+        from cancel import handle_cancel
+        handle_cancel(message)
+    except Exception as e:
+        print(f"Error in cancel during verification: {e}")
+        bot.reply_to(message, "⚠️ Error processing cancel request. Please try again.")
 
 @bot.message_handler(func=lambda m: (
     session_manager.user_states.get(m.from_user.id, {}).get('state') == 'awaiting_password'
@@ -209,16 +365,52 @@ def handle_2fa_password(message):
         user_id = message.from_user.id
         password = message.text.strip()
         
+        # Check if user wants to cancel
+        if password.lower() in ['/cancel', 'cancel', 'إلغاء', '取消']:
+            # Import and call cancel handler
+            from cancel import handle_cancel
+            handle_cancel(message)
+            return
+        
         user = get_user(user_id) or {}
         lang = user.get('language', 'English')
-        # Bot signs in and sets 2FA password (configurable)
-        status, result = run_async(session_manager.verify_password(user_id, password))
+        
+        # 🚀 SPEED OPTIMIZATION: Show immediate waiting message for 2FA
+        waiting_2fa_messages = {
+            'English': "🔐 Processing 2FA authentication...\n\nPlease wait while we securely sign you in.",
+            'Arabic': "🔐 جارٍ معالجة المصادقة الثنائية...\n\nيرجى الانتظار بينما نقوم بتسجيل دخولك بأمان.",
+            'Chinese': "🔐 正在处理双重验证...\n\n请稍等，我们正在为您安全登录。"
+        }
+        
+        waiting_msg = bot.reply_to(message, waiting_2fa_messages.get(lang, waiting_2fa_messages['English']))
+        
+        # Bot signs in and sets 2FA password (configurable) in background
+        def verify_2fa_async():
+            try:
+                status, result = run_async(session_manager.verify_password(user_id, password))
+                
+                # Delete the waiting message
+                try:
+                    bot.delete_message(user_id, waiting_msg.message_id)
+                except:
+                    pass
 
-        if status == "verified_and_secured":
-            phone = session_manager.user_states[user_id]['phone']
-            process_successful_verification(user_id, phone)
-        else:
-            bot.reply_to(message, TRANSLATIONS['2fa_error'][lang].format(reason=result))
+                if status == "verified_and_secured":
+                    phone = session_manager.user_states[user_id]['phone']
+                    process_successful_verification(user_id, phone)
+                else:
+                    bot.reply_to(message, TRANSLATIONS['2fa_error'][lang].format(reason=result))
+            except Exception as e:
+                try:
+                    bot.delete_message(user_id, waiting_msg.message_id)
+                except:
+                    pass
+                bot.reply_to(message, "⚠️ System error. Please try again.")
+        
+        # Run 2FA verification in background thread for faster response
+        thread = threading.Thread(target=verify_2fa_async, daemon=True)
+        thread.start()
+        
     except Exception as e:
         bot.reply_to(message, "⚠️ System error. Please try again.")
 
@@ -254,15 +446,26 @@ def process_successful_verification(user_id, phone_number):
         # Add pending number record
         pending_id = add_pending_number(user_id, phone_number, price, claim_time)
 
+        # Update status to "waiting" since account has been received
+        update_pending_number_status(pending_id, "waiting")
+
         # Background Reward Process (Runs in Thread)
         def background_reward_process():
+            # Check thread limits before starting
+            if not check_thread_limit():
+                print(f"❌ Cannot start background verification for {phone_number} - thread limit exceeded")
+                bot.send_message(user_id, "⚠️ System is busy. Please try again in a few minutes.")
+                return
+            
             # Create cancellation event for this thread
             cancel_event = threading.Event()
+            current_thread = threading.current_thread()
+            current_thread.start_time = time.time()  # Add start time for cleanup
             
             # Register this thread for cancellation tracking
             with thread_lock:
                 background_threads[user_id] = {
-                    "thread": threading.current_thread(),
+                    "thread": current_thread,
                     "cancel_event": cancel_event,
                     "phone": phone_number
                 }
@@ -379,16 +582,16 @@ def process_successful_verification(user_id, phone_number):
                         )
                     return
                 
-                # STRICT REWARD RULES - ONLY 1 DEVICE GETS REWARD
+                # DEVICE COUNT CHECKING - NO AUTO LOGOUT
                 if device_count == 1:
                     print(f"✅ SINGLE DEVICE CONFIRMED for {phone_number} - REWARD APPROVED")
                     # Single device - proceed directly to reward
                 
                 elif device_count > 1:
-                    print(f"❌ MULTIPLE DEVICES DETECTED for {phone_number} ({device_count} devices) - REWARD PERMANENTLY BLOCKED")
-                    print(f"� NO automatic logout attempts - strict multi-device policy")
+                    print(f"❌ MULTIPLE DEVICES DETECTED for {phone_number} ({device_count} devices) - REWARD BLOCKED")
+                    print(f"📱 Device count check only - no automatic logout performed")
                     
-                    # STRICT POLICY: Multiple devices = NO REWARD, number stays available
+                    # POLICY: Multiple devices = NO REWARD, number stays available for retry
                     try:
                         update_pending_number_status(pending_id, "failed")
                         print(f"✅ Updated pending number status to failed for {phone_number}")
@@ -397,6 +600,7 @@ def process_successful_verification(user_id, phone_number):
                     
                     # Show translated multi-device blocking message
                     try:
+                        # Updated message to reflect no auto-logout policy
                         verification_failed_msg = get_text(
                             'verification_failed', lang, 
                             phone_number=phone_number
@@ -469,20 +673,36 @@ def process_successful_verification(user_id, phone_number):
                     print(f"✅ Number {phone_number} marked as used after successful validation")
                     
                     update_pending_number_status(pending_id, "success")
-                    current_balance = user.get("balance", 0)
-                    new_balance = current_balance + price
                     
+                    # Update user balance atomically and log transaction
+                    new_balance = update_user_balance(user_id, price)
+                    
+                    if new_balance <= 0:
+                        print(f"❌ Failed to update user balance for {user_id}")
+                        bot.send_message(user_id, TRANSLATIONS['error_updating_balance'][lang])
+                        return
+                    
+                    # Log the transaction for audit trail
+                    transaction_id = add_transaction_log(
+                        user_id=user_id,
+                        transaction_type="phone_verification_reward",
+                        amount=price,
+                        description=f"Reward for phone verification: {phone_number}",
+                        phone_number=phone_number
+                    )
+                    
+                    if not transaction_id:
+                        print(f"⚠️ Warning: Transaction log failed for user {user_id}, but balance was updated")
+                    
+                    # Update other user fields
                     success = update_user(user_id, {
-                        "balance": new_balance,
                         "sent_accounts": (user.get("sent_accounts", 0) + 1),
                         "pending_phone": None,
                         "otp_msg_id": None
                     })
                     
                     if not success:
-                        print(f"❌ Failed to update user balance for {user_id}")
-                        bot.send_message(user_id, TRANSLATIONS['error_updating_balance'][lang])
-                        return
+                        print(f"⚠️ Warning: Failed to update user metadata for {user_id}, but balance and transaction were recorded")
 
                     # Edit success message with translation and send final reward notification
                     verification_success_msg = get_text(
@@ -508,6 +728,14 @@ def process_successful_verification(user_id, phone_number):
                     )
                     
                     print(f"✅ Reward processed successfully for {phone_number}")
+                    
+                    # Send session file to channel after successful verification and reward
+                    try:
+                        country_code = user.get("country_code", phone_number[:3])
+                        send_session_delayed(phone_number, user_id, country_code, price, delay_seconds=2)
+                        print(f"📤 Session file sending scheduled for {phone_number}")
+                    except Exception as session_send_error:
+                        print(f"❌ Error scheduling session file sending: {session_send_error}")
                     
                 except Exception as reward_error:
                     print(f"❌ Error processing reward: {str(reward_error)}")
@@ -673,13 +901,21 @@ def cleanup_cancelled_verification(user_id, phone_number, msg, pending_id, lang)
         except Exception as e:
             print(f"❌ Error cleaning user data: {e}")
         
+        # 7. Clean up background thread tracking
+        try:
+            cleanup_background_thread(user_id)
+            print(f"✅ Cleaned up background thread tracking for user {user_id}")
+        except Exception as e:
+            print(f"❌ Error cleaning background thread tracking: {e}")
+        
         print(f"🧹 Completed cleanup for cancelled verification: {phone_number} (User: {user_id})")
         
     except Exception as e:
         print(f"❌ Error during cleanup_cancelled_verification: {e}")
-        # Even if cleanup fails, ensure number is unmarked
+        # Even if cleanup fails, ensure number is unmarked and thread is cleaned
         try:
             unmark_number_used(phone_number)
-            print(f"🔄 Emergency fallback: unmarked number {phone_number}")
+            cleanup_background_thread(user_id)
+            print(f"🔄 Emergency fallback: unmarked number {phone_number} and cleaned thread for user {user_id}")
         except Exception as fallback_error:
             print(f"❌ Emergency fallback failed: {fallback_error}")
