@@ -548,7 +548,25 @@ class SessionManager:
                 for session_file in os.listdir(item_path):
                     if session_file.endswith('.session'):
                         phone_number = session_file.replace('.session', '')
-                        session_info = self.get_session_info(phone_number)
+                        # Handle both regular phone numbers and temporary session files
+                        session_path = os.path.join(item_path, session_file)
+                        
+                        try:
+                            session_info = self.get_session_info(phone_number)
+                        except Exception:
+                            # For temporary sessions, create a basic info dict
+                            stat = os.stat(session_path) if os.path.exists(session_path) else None
+                            session_info = {
+                                "phone_number": phone_number,
+                                "country_code": country,
+                                "session_path": session_path,
+                                "exists": os.path.exists(session_path),
+                                "folder": item_path,
+                                "size": stat.st_size if stat else 0,
+                                "modified": stat.st_mtime if stat else 0,
+                                "created": stat.st_ctime if stat else 0
+                            }
+                        
                         sessions_by_country[country].append(session_info)
             elif item.endswith('.session') and not country_code:
                 # This is a session file in the root directory (legacy)
