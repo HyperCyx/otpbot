@@ -243,11 +243,11 @@ def handle_cap(message):
         # Each country in its own blockquote with copyable code
         country_lines.append(f"> {flag} `{code_escaped}` \\| \\$ {price_escaped}\\$ \\| \\$ {claim_time_escaped}s")
 
-    # Combine all parts
+    # Combine all parts - need empty line between blockquotes to keep them separate
     full_message = (
         header +
-        "\n".join(country_lines) +
-        "\n────────────────\n" +
+        "\n\n".join(country_lines) +
+        "\n\n────────────────\n" +
         f"🌍 *Total Countries*: {len(countries)}\n\n"
     )
     
