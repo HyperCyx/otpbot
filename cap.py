@@ -217,8 +217,6 @@ def handle_cap(message):
     # Sort countries by country code
     sorted_countries = sorted(countries, key=lambda x: x['country_code'])
     
-    # Create a single line with all countries for bigger appearance and copyable text
-    country_list = []
     for c in sorted_countries:
         code = c['country_code']
         info = get_country_info(code)
@@ -226,21 +224,8 @@ def handle_cap(message):
         free_spam = c.get('free_spam', c.get('price', 0.0))
         claim_time = c.get('claim_time', 600)
         
-        # Escape special characters for MarkdownV2
-        def escape_md_v2(text):
-            chars_to_escape = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
-            for char in chars_to_escape:
-                text = text.replace(char, f'\\{char}')
-            return text
-        
-        code_escaped = escape_md_v2(code)
-        price_escaped = escape_md_v2(str(free_spam))
-        
-        # Format each country as clickable/copyable text
-        country_list.append(f"{flag}**{code_escaped}**\\|**{price_escaped}$**\\|**{claim_time}s**")
-    
-    # Join all countries with spaces for single line display
-    text += "> " + " ".join(country_list)
+        # Format with your specified format
+        text += f">`{flag} {code} | $ {free_spam}$ | $ {claim_time}s`\n"
     
     text += "\n────────────────"
     text += f"\n🌍 *Total Countries*: {len(countries)}"
