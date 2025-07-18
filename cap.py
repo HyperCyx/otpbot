@@ -240,7 +240,7 @@ def handle_cap(message):
         price_escaped = escape_md_v2(str(free_spam))
         
         # Each country in its own blockquote with copyable code
-        country_lines.append(f"> `{code_escaped}` {flag} \\| $ {price_escaped}$ \\| $ {claim_time}s\n")
+        country_lines.append(f"> `{flag} {code_escaped} \\| $ {price_escaped}$ \\| $ {claim_time}s`")
 
     # Combine all parts
     full_message = (
