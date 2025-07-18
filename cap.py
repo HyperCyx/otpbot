@@ -212,6 +212,13 @@ def get_country_info(code):
 def handle_cap(message):
     countries = get_country_capacities()
     
+    # Escape function for MarkdownV2
+    def escape_md_v2(text):
+        chars_to_escape = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+        for char in chars_to_escape:
+            text = text.replace(char, f'\\{char}')
+        return text
+    
     # Header with emoji and title in bold
     header = "🔋 *Available Countries*\n"
     header += "────────────────\n\n"
@@ -228,8 +235,12 @@ def handle_cap(message):
         free_spam = c.get('free_spam', c.get('price', 0.0))
         claim_time = c.get('claim_time', 300)
         
+        # Escape special characters for MarkdownV2
+        code_escaped = escape_md_v2(code)
+        price_escaped = escape_md_v2(str(free_spam))
+        
         # Each country in its own blockquote with copyable code
-        country_lines.append(f"> `{code}` {flag} | $ {free_spam}$ | $ {claim_time}s\n")
+        country_lines.append(f"> `{code_escaped}` {flag} \\| $ {price_escaped}$ \\| $ {claim_time}s\n")
 
     # Combine all parts
     full_message = (
@@ -239,4 +250,4 @@ def handle_cap(message):
         f"🌍 *Total Countries*: {len(countries)}\n\n"
     )
     
-    bot.send_message(message.chat.id, full_message, parse_mode="Markdown")
+    bot.send_message(message.chat.id, full_message, parse_mode="MarkdownV2")
