@@ -210,15 +210,6 @@ def get_country_info(code):
 @bot.message_handler(commands=['cap'])
 @require_channel_membership
 def handle_cap(message):
-    user_id = message.from_user.id
-    
-    # Check if user is in withdrawal state and cancel it
-    if user_id in user_withdraw_state:
-        clear_withdraw_state(user_id)
-        user = get_user(user_id) or {}
-        user_language = user.get('language', 'English')
-        bot.send_message(message.chat.id, get_text('withdrawal_cancelled', user_language))
-    
     countries = get_country_capacities()
     text = "🔋 *Available Countries*\n"
     text += "────────────────\n"
@@ -231,10 +222,10 @@ def handle_cap(message):
         info = get_country_info(code)
         flag = info['flag']
         free_spam = c.get('free_spam', c.get('price', 0.0))
-        claim_time = c.get('claim_time', 600)  # Default to 600s if not specified
+        claim_time = c.get('claim_time', 600)
         
-        # Format the line similar to your screenshot
-        text += f"{flag} {code} | \"💰 {free_spam}$\" | \"⏰ {claim_time}s\"\n"
+        # Format with Telegram blockquote (>) and monospace (`) for the blue background effect
+        text += f"> {flag} `{code}` | {free_spam}$ | {claim_time}s\n"
     
     text += "────────────────"
     text += f"\n🌍 *Total Countries*: {len(countries)}"
