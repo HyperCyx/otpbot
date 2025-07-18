@@ -6,6 +6,7 @@ from bot_init import bot
 from config import ADMIN_IDS, SESSIONS_DIR
 from telegram_otp import session_manager
 from utils import require_channel_membership
+from temp_session_cleanup import force_cleanup
 
 logging.basicConfig(level=logging.INFO)
 
@@ -174,4 +175,31 @@ def handle_clean_sessions_all(message):
         bot.send_message(message.chat.id, summary)
     except Exception as e:
         logging.exception("Error in /cleansessionsall command handler:")
+        bot.reply_to(message, f"❌ Internal error: {e}")
+
+# /cleantempsessions - Clean up temporary session files
+@bot.message_handler(commands=['cleantempsessions'])
+@require_channel_membership
+def handle_clean_temp_sessions(message):
+    try:
+        logging.info(f"/cleantempsessions command triggered by user {message.from_user.id}")
+        user_id = message.from_user.id
+        if user_id not in ADMIN_IDS:
+            bot.reply_to(message, "❌ You are not authorized to use this command.")
+            return
+        
+        # Force cleanup of temporary sessions
+        expired_states, cleanup_count, cleanup_size = force_cleanup()
+        
+        summary = (
+            f"🧹 Temporary Session Cleanup Complete\n\n"
+            f"📋 Expired user states: {expired_states}\n"
+            f"📁 Temp files cleaned: {cleanup_count}\n"
+            f"💾 Space freed: {format_size(cleanup_size)}\n"
+            f"✅ Cleanup completed successfully."
+        )
+        bot.send_message(message.chat.id, summary)
+        
+    except Exception as e:
+        logging.exception("Error in /cleantempsessions command handler:")
         bot.reply_to(message, f"❌ Internal error: {e}")

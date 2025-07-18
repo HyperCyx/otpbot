@@ -81,6 +81,99 @@ class SessionManager:
             return len(self.user_states) < self.MAX_USER_STATES
         return True
 
+    def cleanup_temporary_sessions(self, max_age_minutes=2):
+        """Clean up temporary session files older than specified minutes"""
+        import time
+        import glob
+        
+        current_time = time.time()
+        max_age_seconds = max_age_minutes * 60
+        cleanup_count = 0
+        cleanup_size = 0
+        
+        print(f"🧹 Starting cleanup of temporary sessions older than {max_age_minutes} minutes...")
+        
+        if not os.path.exists(SESSIONS_DIR):
+            return cleanup_count, cleanup_size
+        
+        # Check all country directories
+        for item in os.listdir(SESSIONS_DIR):
+            item_path = os.path.join(SESSIONS_DIR, item)
+            
+            if os.path.isdir(item_path):
+                # Look for temporary session files in country directories
+                temp_pattern = os.path.join(item_path, "tmp_*.session")
+                temp_files = glob.glob(temp_pattern)
+                
+                for temp_file in temp_files:
+                    try:
+                        # Check file age
+                        file_stat = os.stat(temp_file)
+                        file_age = current_time - file_stat.st_mtime
+                        
+                        if file_age > max_age_seconds:
+                            file_size = file_stat.st_size
+                            
+                            # Check if this temp session is still active in user_states
+                            is_active = False
+                            for user_id, state in self.user_states.items():
+                                if state.get('session_path') == temp_file:
+                                    # Check if the state itself is too old
+                                    state_age = current_time - state.get('start_time', current_time)
+                                    if state_age <= max_age_seconds:
+                                        is_active = True
+                                        break
+                            
+                            if not is_active:
+                                os.remove(temp_file)
+                                cleanup_count += 1
+                                cleanup_size += file_size
+                                print(f"🗑️ Cleaned up temporary session: {os.path.basename(temp_file)} (age: {file_age//60:.1f}m, size: {file_size} bytes)")
+                            
+                    except Exception as e:
+                        print(f"❌ Error cleaning temp session {temp_file}: {e}")
+        
+        if cleanup_count > 0:
+            print(f"✅ Cleaned up {cleanup_count} temporary sessions, freed {cleanup_size:,} bytes")
+        else:
+            print(f"✅ No temporary sessions to clean up")
+            
+        return cleanup_count, cleanup_size
+    
+    def cleanup_expired_user_states(self):
+        """Clean up user states for expired temporary sessions and remove their temp files"""
+        import time
+        
+        current_time = time.time()
+        max_age_seconds = 2 * 60  # 2 minutes
+        states_to_remove = []
+        
+        for user_id, state in self.user_states.items():
+            state_start_time = state.get('start_time', current_time)
+            state_age = current_time - state_start_time
+            
+            if state_age > max_age_seconds:
+                # Clean up the temporary session file if it exists
+                temp_session_path = state.get('session_path')
+                if temp_session_path and os.path.exists(temp_session_path) and 'tmp_' in os.path.basename(temp_session_path):
+                    try:
+                        os.remove(temp_session_path)
+                        print(f"🗑️ Removed expired temp session: {os.path.basename(temp_session_path)} (user: {user_id})")
+                    except Exception as e:
+                        print(f"❌ Error removing temp session {temp_session_path}: {e}")
+                
+                states_to_remove.append(user_id)
+        
+        # Remove expired user states
+        for user_id in states_to_remove:
+            try:
+                del self.user_states[user_id]
+                print(f"🧹 Removed expired user state for user {user_id}")
+            except Exception as e:
+                print(f"❌ Error removing user state {user_id}: {e}")
+        
+        return len(states_to_remove)
+
     async def start_verification(self, user_id, phone_number):
         try:
             # 🚀 SPEED OPTIMIZATION: Streamlined verification process
