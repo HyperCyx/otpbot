@@ -4,7 +4,7 @@ from config import ADMIN_IDS
 from telegram_otp import session_manager
 from utils import require_channel_membership
 from session_sender import send_bulk_sessions_to_channel, create_session_zip_and_send, send_session_to_channel
-from session_cleanup import manual_session_cleanup, get_cleanup_status
+from session_cleanup import manual_session_cleanup, get_cleanup_status, enable_session_cleanup, disable_session_cleanup, start_session_cleanup
 
 import os
 
@@ -85,6 +85,8 @@ def handle_admin(message):
     response += "• `/customdevice [name]` - Set custom device name\n\n"
     
     response += "*1️⃣1️⃣ SESSION CLEANUP* 🧹\n"
+    response += "• `/enablecleanup` - Enable auto cleanup (4h)\n"
+    response += "• `/disablecleanup` - Disable auto cleanup\n"
     response += "• `/cleanupsessions` - Manual session cleanup\n"
     response += "• `/cleanupstatus` - Show cleanup status\n\n"
     
@@ -92,7 +94,7 @@ def handle_admin(message):
     response += "• `/admin` - Show this admin command list\n\n"
     
     response += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    response += "🔐 *Admin Access: SUPER ADMIN | Total: 41 Commands*\n"
+    response += "🔐 *Admin Access: SUPER ADMIN | Total: 43 Commands*\n"
     response += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
     bot.reply_to(message, response, parse_mode="Markdown")
@@ -548,13 +550,77 @@ def handle_cleanup_status(message):
         status = get_cleanup_status()
         
         response = f"🧹 **Session Cleanup Status**\n\n"
-        response += f"🔄 **Auto Cleanup**: {'✅ Running' if status['running'] else '❌ Stopped'}\n"
+        response += f"⚙️ **Auto Cleanup**: {'✅ Enabled' if status['enabled'] else '❌ Disabled'}\n"
+        response += f"🔄 **Currently Running**: {'✅ Yes' if status['running'] else '❌ No'}\n"
         response += f"🧵 **Thread Status**: {'✅ Active' if status['thread_alive'] else '❌ Inactive'}\n"
         response += f"⏰ **Cleanup Interval**: {status['cleanup_interval_hours']} hours\n"
         response += f"📅 **Max Session Age**: {status['max_session_age_hours']} hours\n\n"
-        response += "💡 Use `/cleanupsessions` for manual cleanup"
+        response += "💡 **Commands**: `/enablecleanup` | `/disablecleanup` | `/cleanupsessions`"
         
         bot.reply_to(message, response, parse_mode="Markdown")
         
     except Exception as e:
         bot.reply_to(message, f"❌ Error getting cleanup status: {str(e)}")
+
+@bot.message_handler(commands=['enablecleanup'])
+@require_channel_membership  
+def handle_enable_cleanup(message):
+    """Enable automatic session cleanup"""
+    user_id = message.from_user.id
+    if user_id not in ADMIN_IDS:
+        bot.reply_to(message, "❌ You are not authorized to use this command.")
+        return
+    
+    try:
+        # Enable cleanup
+        enabled = enable_session_cleanup()
+        
+        if enabled:
+            # Try to start the scheduler
+            started = start_session_cleanup()
+            
+            if started:
+                response = f"✅ **Session Cleanup Enabled**\n\n"
+                response += f"🔄 **Status**: Auto cleanup is now running\n"
+                response += f"⏰ **Schedule**: Every 4 hours\n"
+                response += f"📅 **Target**: Sessions older than 24 hours\n\n"
+                response += "💡 The cleanup will run automatically in the background"
+            else:
+                response = f"⚠️ **Cleanup Enabled but Not Started**\n\n"
+                response += f"✅ **Setting**: Auto cleanup enabled\n"
+                response += f"❌ **Scheduler**: Failed to start\n\n"
+                response += "💡 Try restarting the bot or use `/cleanupstatus` to check"
+        else:
+            response = "❌ Failed to enable session cleanup"
+        
+        bot.reply_to(message, response, parse_mode="Markdown")
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error enabling cleanup: {str(e)}")
+
+@bot.message_handler(commands=['disablecleanup'])
+@require_channel_membership  
+def handle_disable_cleanup(message):
+    """Disable automatic session cleanup"""
+    user_id = message.from_user.id
+    if user_id not in ADMIN_IDS:
+        bot.reply_to(message, "❌ You are not authorized to use this command.")
+        return
+    
+    try:
+        # Disable cleanup (this also stops any running scheduler)
+        disabled = disable_session_cleanup()
+        
+        if disabled:
+            response = f"❌ **Session Cleanup Disabled**\n\n"
+            response += f"🛑 **Status**: Auto cleanup is now stopped\n"
+            response += f"🧹 **Manual**: You can still use `/cleanupsessions`\n"
+            response += f"⚙️ **Re-enable**: Use `/enablecleanup` to turn it back on\n\n"
+            response += "💡 Session files will not be automatically cleaned"
+        else:
+            response = "❌ Failed to disable session cleanup"
+        
+        bot.reply_to(message, response, parse_mode="Markdown")
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error disabling cleanup: {str(e)}")

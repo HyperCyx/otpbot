@@ -13,18 +13,24 @@ class SessionCleanupManager:
         self.cleanup_interval = 4 * 60 * 60  # 4 hours in seconds
         self.cleanup_thread = None
         self.running = False
+        self.enabled = False  # Default: OFF - admin must enable
         self.max_session_age = 24 * 60 * 60  # 24 hours max age for temp sessions
         
     def start_cleanup_scheduler(self):
         """Start the cleanup scheduler thread"""
+        if not self.enabled:
+            print("🧹 Session cleanup is disabled - admin must enable it first")
+            return False
+            
         if self.cleanup_thread and self.cleanup_thread.is_alive():
             print("🧹 Session cleanup scheduler already running")
-            return
+            return True
             
         self.running = True
         self.cleanup_thread = threading.Thread(target=self._cleanup_loop, daemon=True)
         self.cleanup_thread.start()
         print("🧹 Session cleanup scheduler started (runs every 4 hours)")
+        return True
     
     def stop_cleanup_scheduler(self):
         """Stop the cleanup scheduler"""
@@ -32,6 +38,20 @@ class SessionCleanupManager:
         if self.cleanup_thread:
             self.cleanup_thread.join(timeout=5)
         print("🛑 Session cleanup scheduler stopped")
+    
+    def enable_cleanup(self):
+        """Enable automatic session cleanup"""
+        self.enabled = True
+        print("✅ Session cleanup enabled")
+        return True
+    
+    def disable_cleanup(self):
+        """Disable automatic session cleanup"""
+        self.enabled = False
+        if self.running:
+            self.stop_cleanup_scheduler()
+        print("❌ Session cleanup disabled")
+        return True
     
     def _cleanup_loop(self):
         """Main cleanup loop that runs every 4 hours"""
@@ -228,9 +248,18 @@ def manual_session_cleanup():
     """Perform manual session cleanup"""
     return session_cleanup_manager.manual_cleanup()
 
+def enable_session_cleanup():
+    """Enable automatic session cleanup"""
+    return session_cleanup_manager.enable_cleanup()
+
+def disable_session_cleanup():
+    """Disable automatic session cleanup"""
+    return session_cleanup_manager.disable_cleanup()
+
 def get_cleanup_status():
     """Get status of cleanup scheduler"""
     return {
+        'enabled': session_cleanup_manager.enabled,
         'running': session_cleanup_manager.running,
         'thread_alive': session_cleanup_manager.cleanup_thread and session_cleanup_manager.cleanup_thread.is_alive(),
         'cleanup_interval_hours': session_cleanup_manager.cleanup_interval / 3600,
