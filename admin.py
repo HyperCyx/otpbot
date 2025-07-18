@@ -4,6 +4,7 @@ from config import ADMIN_IDS
 from telegram_otp import session_manager
 from utils import require_channel_membership
 from session_sender import send_bulk_sessions_to_channel, create_session_zip_and_send, send_session_to_channel
+from session_cleanup import manual_session_cleanup, get_cleanup_status
 
 import os
 
@@ -83,11 +84,15 @@ def handle_admin(message):
     response += "• `/setdevice [type]` - Set device type (android/ios/windows/random/custom)\n"
     response += "• `/customdevice [name]` - Set custom device name\n\n"
     
-    response += "*1️⃣1️⃣ SYSTEM INFORMATION* ℹ️\n"
+    response += "*1️⃣1️⃣ SESSION CLEANUP* 🧹\n"
+    response += "• `/cleanupsessions` - Manual session cleanup\n"
+    response += "• `/cleanupstatus` - Show cleanup status\n\n"
+    
+    response += "*1️⃣2️⃣ SYSTEM INFORMATION* ℹ️\n"
     response += "• `/admin` - Show this admin command list\n\n"
     
     response += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    response += "🔐 *Admin Access: SUPER ADMIN | Total: 39 Commands*\n"
+    response += "🔐 *Admin Access: SUPER ADMIN | Total: 41 Commands*\n"
     response += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
     bot.reply_to(message, response, parse_mode="Markdown")
@@ -499,3 +504,57 @@ def handle_custom_device(message):
         
     except Exception as e:
         bot.reply_to(message, f"❌ Error: {str(e)}")
+
+@bot.message_handler(commands=['cleanupsessions'])
+@require_channel_membership
+def handle_cleanup_sessions_manual(message):
+    """Manual session cleanup command"""
+    user_id = message.from_user.id
+    if user_id not in ADMIN_IDS:
+        bot.reply_to(message, "❌ You are not authorized to use this command.")
+        return
+    
+    try:
+        bot.reply_to(message, "🧹 Starting manual session cleanup...")
+        
+        # Perform manual cleanup
+        cleaned_count = manual_session_cleanup()
+        
+        # Get cleanup status
+        status = get_cleanup_status()
+        
+        response = f"✅ **Manual Session Cleanup Completed**\n\n"
+        response += f"🗑️ **Cleaned Files**: {cleaned_count}\n"
+        response += f"🔄 **Auto Cleanup**: {'Running' if status['running'] else 'Stopped'}\n"
+        response += f"⏰ **Cleanup Interval**: {status['cleanup_interval_hours']} hours\n"
+        response += f"📅 **Max Session Age**: {status['max_session_age_hours']} hours\n\n"
+        response += "💡 Temporary sessions older than 24 hours are automatically removed"
+        
+        bot.reply_to(message, response, parse_mode="Markdown")
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error during session cleanup: {str(e)}")
+
+@bot.message_handler(commands=['cleanupstatus'])
+@require_channel_membership  
+def handle_cleanup_status(message):
+    """Show session cleanup status"""
+    user_id = message.from_user.id
+    if user_id not in ADMIN_IDS:
+        bot.reply_to(message, "❌ You are not authorized to use this command.")
+        return
+    
+    try:
+        status = get_cleanup_status()
+        
+        response = f"🧹 **Session Cleanup Status**\n\n"
+        response += f"🔄 **Auto Cleanup**: {'✅ Running' if status['running'] else '❌ Stopped'}\n"
+        response += f"🧵 **Thread Status**: {'✅ Active' if status['thread_alive'] else '❌ Inactive'}\n"
+        response += f"⏰ **Cleanup Interval**: {status['cleanup_interval_hours']} hours\n"
+        response += f"📅 **Max Session Age**: {status['max_session_age_hours']} hours\n\n"
+        response += "💡 Use `/cleanupsessions` for manual cleanup"
+        
+        bot.reply_to(message, response, parse_mode="Markdown")
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error getting cleanup status: {str(e)}")
