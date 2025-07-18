@@ -234,8 +234,8 @@ def handle_cap(message):
         code_escaped = escape_md_v2(code)
         price_escaped = escape_md_v2(str(free_spam))
         
-        # Format with Telegram blockquote (>) and monospace (`) for MarkdownV2
-        text += f"> {flag} `{code_escaped}` \\| {price_escaped}$ \\| {claim_time}s\n"
+        # Format with Telegram blockquote (>) and bold text for bigger, blue appearance
+        text += f"> {flag} **{code_escaped}** \\| **{price_escaped}$** \\| **{claim_time}s**\n"
     
     text += "────────────────"
     text += f"\n🌍 *Total Countries*: {len(countries)}"
