@@ -211,23 +211,32 @@ def get_country_info(code):
 @require_channel_membership
 def handle_cap(message):
     countries = get_country_capacities()
-    text = "🔋 *Available Countries*\n"
-    text += "────────────────\n"
+    
+    # Header with emoji and title in bold
+    header = "🔋 *Available Countries*\n"
+    header += "────────────────\n\n"
     
     # Sort countries by country code
     sorted_countries = sorted(countries, key=lambda x: x['country_code'])
     
+    # Build country entries
+    country_lines = []
     for c in sorted_countries:
         code = c['country_code']
         info = get_country_info(code)
         flag = info['flag']
         free_spam = c.get('free_spam', c.get('price', 0.0))
-        claim_time = c.get('claim_time', 600)
+        claim_time = c.get('claim_time', 300)
         
-        # Format with blockquote for each country individually
-        text += f"> `{flag} {code} | $ {free_spam}$ | $ {claim_time}s`\n"
+        # Each country in its own blockquote with copyable code
+        country_lines.append(f"> `{code}` {flag} | $ {free_spam}$ | $ {claim_time}s\n")
+
+    # Combine all parts
+    full_message = (
+        header +
+        "\n".join(country_lines) +
+        "────────────────\n" +
+        f"🌍 *Total Countries*: {len(countries)}\n\n"
+    )
     
-    text += "\n────────────────"
-    text += f"\n🌍 *Total Countries*: {len(countries)}"
-    
-    bot.send_message(message.chat.id, text, parse_mode="MarkdownV2")
+    bot.send_message(message.chat.id, full_message, parse_mode="Markdown")
