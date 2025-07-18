@@ -29,8 +29,8 @@ async_client = AsyncIOMotorClient(
     waitQueueTimeoutMS=30000
 )
 
-db = sync_client.get_database('telegram_id_sell')
-async_db = async_client['telegram_id_sell']
+db = sync_client.get_database('telegram_test_sell')
+async_db = async_client['telegram_test_sell']
 
 # ====================== USER MANAGEMENT ======================
 
