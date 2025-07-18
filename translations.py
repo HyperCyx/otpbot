@@ -20,9 +20,9 @@ TRANSLATIONS = {
         'Chinese': "❌ 该国家没有容量"
     },
     'otp_prompt': {
-        'English': "📲 Please enter the OTP you received on: {phone}\n\nReply with the 6-digit code.\nType /cancel to abort.",
-        'Arabic': "📲 يرجى إدخال رمز OTP الذي استلمته على: {phone}\n\nأدخل الرمز المكون من 6 أرقام.\nاكتب /cancel للإلغاء.",
-        'Chinese': "📲 请输入你在 {phone} 上收到的OTP验证码\n\n回复6位数字代码。\n输入 /cancel 取消。"
+        'English': "🔢Enter the code sent to {phone}\n\n/cancel",
+        'Arabic': "🔢أدخل الرمز المرسل إلى {phone}\n\n/cancel",
+        'Chinese': "🔢输入发送到 {phone} 的验证码\n\n/cancel"
     },
     'no_active_verification': {
         'English': "❌ No active verification",

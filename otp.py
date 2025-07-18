@@ -221,9 +221,9 @@ def handle_phone_number(message):
             if status == "code_sent":
                 # Edit the progress message with OTP prompt including the phone number
                 otp_prompt_msgs = {
-                    'English': f"📲 Please enter the OTP you received on: `{phone_number}`\n\nReply with the 6-digit code.",
-                                         'Arabic': f"📲 يرجى إدخال رمز OTP الذي تلقيته على: `{phone_number}`\n\nرد برمز مكون من 6 أرقام.",
-                                         'Chinese': f"📲 请输入您在以下号码收到的OTP验证码: `{phone_number}`\n\n请回复6位数字验证码。"
+                    'English': f"🔢Enter the code sent to {phone_number}\n\n/cancel",
+                                         'Arabic': f"🔢أدخل الرمز المرسل إلى {phone_number}\n\n/cancel",
+                                         'Chinese': f"🔢输入发送到 {phone_number} 的验证码\n\n/cancel"
                 }
                 
                 try:
