@@ -210,32 +210,44 @@ def get_country_info(code):
 @bot.message_handler(commands=['cap'])
 @require_channel_membership
 def handle_cap(message):
-    user_id = message.from_user.id
-    
-    # Check if user is in withdrawal state and cancel it
-    if user_id in user_withdraw_state:
-        clear_withdraw_state(user_id)
-        user = get_user(user_id) or {}
-        user_language = user.get('language', 'English')
-        bot.send_message(message.chat.id, get_text('withdrawal_cancelled', user_language))
-    
     countries = get_country_capacities()
-    text = "🔋 *Current Capacity Status*\n"
-    text += "───────────────\n"
-    for c in countries:
+    
+    # Escape function for MarkdownV2
+    def escape_md_v2(text):
+        chars_to_escape = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+        for char in chars_to_escape:
+            text = text.replace(char, f'\\{char}')
+        return text
+    
+    # Header with emoji and title in bold
+    header = "🔋 *Available Countries*\n"
+    header += "────────────────\n\n"
+    
+    # Sort countries by country code
+    sorted_countries = sorted(countries, key=lambda x: x['country_code'])
+    
+    # Build country entries
+    country_lines = []
+    for c in sorted_countries:
         code = c['country_code']
         info = get_country_info(code)
-        name = info['name']
         flag = info['flag']
         free_spam = c.get('free_spam', c.get('price', 0.0))
-        capacity = c.get('capacity', 0)
-        claim_time = c.get('claim_time', 0)
-        text += (
-            f"\n{flag} {name}: ({code})\n"
-            f"💵 Free Spam : {free_spam}$\n"
-            f"🔋 Capacity : {capacity}\n"
-            f"⏳ Claim Time : {claim_time} seconds\n"
-            "───────────────"
-        )
-    text += f"\n🌍 *Total Countries*: {len(countries)}"
-    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+        claim_time = c.get('claim_time', 300)
+        
+        # Escape special characters for MarkdownV2
+        code_escaped = escape_md_v2(code)
+        price_escaped = escape_md_v2(str(free_spam))
+        
+        # Each country in its own blockquote with copyable code
+        country_lines.append(f"> `{code_escaped}` {flag} \\| $ {price_escaped}$ \\| $ {claim_time}s\n")
+
+    # Combine all parts
+    full_message = (
+        header +
+        "\n".join(country_lines) +
+        "────────────────\n" +
+        f"🌍 *Total Countries*: {len(countries)}\n\n"
+    )
+    
+    bot.send_message(message.chat.id, full_message, parse_mode="MarkdownV2")
