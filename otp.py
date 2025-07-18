@@ -318,8 +318,14 @@ def handle_otp_reply(message):
 
                 if status == "verified_and_secured":
                     # No 2FA needed, proceed directly
-                    process_successful_verification(user_id, user["pending_phone"])
+                    phone_number = user.get("pending_phone")
+                    if phone_number:
+                        # Clear pending phone and process verification
+                        update_user(user_id, {"pending_phone": None})
+                        process_successful_verification(user_id, phone_number)
+                        
                 elif status == "need_password":
+                    # 2FA required - keep pending_phone but set state for 2FA
                     session_manager.user_states[user_id] = {'state': 'awaiting_password'}
                     password_messages = {
                         'English': "🔐 Two-factor authentication required.\n\nPlease enter your 2FA password:",
@@ -416,17 +422,13 @@ def handle_otp_direct(message):
                 if status == "verified_and_secured":
                     # No 2FA needed, proceed directly
                     phone_number = user.get("pending_phone")
-                    update_user(user_id, {"pending_phone": None})
-                    
-                    completion_messages = {
-                        'English': f"✅ Successfully verified {phone_number}!\n\n🎉 Your session has been created and secured.",
-                        'Arabic': f"✅ تم التحقق بنجاح من {phone_number}!\n\n🎉 تم إنشاء جلستك وتأمينها.",
-                        'Chinese': f"✅ 成功验证 {phone_number}!\n\n🎉 您的会话已创建并受到保护。"
-                    }
-                    bot.send_message(user_id, completion_messages.get(lang, completion_messages['English']))
+                    if phone_number:
+                        # Clear pending phone and process verification
+                        update_user(user_id, {"pending_phone": None})
+                        process_successful_verification(user_id, phone_number)
                     
                 elif status == "need_password":
-                    # 2FA required
+                    # 2FA required - keep pending_phone but set state for 2FA
                     session_manager.user_states[user_id] = {'state': 'awaiting_password'}
                     
                     password_messages = {
@@ -530,10 +532,29 @@ def handle_2fa_password(message):
                     pass
 
                 if status == "verified_and_secured":
-                    phone = session_manager.user_states[user_id]['phone']
-                    process_successful_verification(user_id, phone)
+                    # Get phone from user data, not session state
+                    phone_number = user.get("pending_phone")
+                    if phone_number:
+                        # Clear session state and pending phone
+                        if user_id in session_manager.user_states:
+                            del session_manager.user_states[user_id]
+                        update_user(user_id, {"pending_phone": None})
+                        
+                        # Process successful verification
+                        process_successful_verification(user_id, phone_number)
+                    else:
+                        bot.send_message(user_id, "❌ Session expired. Please try again.")
                 else:
-                    bot.reply_to(message, TRANSLATIONS['2fa_error'][lang].format(reason=result))
+                    # Clear session state on failure
+                    if user_id in session_manager.user_states:
+                        del session_manager.user_states[user_id]
+                    
+                    error_2fa_messages = {
+                        'English': f"❌ 2FA verification failed: {result}\n\nPlease try again or type /cancel to abort.",
+                        'Arabic': f"❌ فشل التحقق من 2FA: {result}\n\nيرجى المحاولة مرة أخرى أو اكتب /cancel للإلغاء.",
+                        'Chinese': f"❌ 2FA验证失败: {result}\n\n请重试或输入 /cancel 取消。"
+                    }
+                    bot.send_message(user_id, error_2fa_messages.get(lang, error_2fa_messages['English']))
             except Exception as e:
                 try:
                     bot.delete_message(user_id, waiting_msg.message_id)
