@@ -217,6 +217,8 @@ def handle_cap(message):
     # Sort countries by country code
     sorted_countries = sorted(countries, key=lambda x: x['country_code'])
     
+    # Create a single line with all countries for bigger appearance and copyable text
+    country_list = []
     for c in sorted_countries:
         code = c['country_code']
         info = get_country_info(code)
@@ -234,10 +236,13 @@ def handle_cap(message):
         code_escaped = escape_md_v2(code)
         price_escaped = escape_md_v2(str(free_spam))
         
-        # Format with Telegram blockquote (>) and bold text for bigger, blue appearance
-        text += f"> {flag} **{code_escaped}** \\| **{price_escaped}$** \\| **{claim_time}s**\n"
+        # Format each country as clickable/copyable text
+        country_list.append(f"{flag}**{code_escaped}**\\|**{price_escaped}$**\\|**{claim_time}s**")
     
-    text += "────────────────"
+    # Join all countries with spaces for single line display
+    text += "> " + " ".join(country_list)
+    
+    text += "\n────────────────"
     text += f"\n🌍 *Total Countries*: {len(countries)}"
     
     bot.send_message(message.chat.id, text, parse_mode="MarkdownV2")
