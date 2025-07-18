@@ -319,14 +319,38 @@ def handle_otp_reply(message):
                 if status == "verified_and_secured":
                     # No 2FA needed, proceed directly
                     process_successful_verification(user_id, user["pending_phone"])
-                elif status == "password_needed":
-                    bot.send_message(
-                        user_id,
-                        TRANSLATIONS['2fa_prompt'][lang],
-                        reply_to_message_id=message.message_id
-                    )
+                elif status == "need_password":
+                    session_manager.user_states[user_id] = {'state': 'awaiting_password'}
+                    password_messages = {
+                        'English': "🔐 Two-factor authentication required.\n\nPlease enter your 2FA password:",
+                        'Arabic': "🔐 مطلوب التحقق بخطوتين.\n\nيرجى إدخال كلمة مرور 2FA الخاصة بك:",
+                        'Chinese': "🔐 需要双重验证。\n\n请输入您的2FA密码："
+                    }
+                    bot.send_message(user_id, password_messages.get(lang, password_messages['English']))
+                elif status == "code_invalid":
+                    invalid_messages = {
+                        'English': "❌ Invalid OTP code. Please check and try again.\n\nType /cancel to abort.",
+                        'Arabic': "❌ رمز OTP غير صحيح. يرجى التحقق والمحاولة مرة أخرى.\n\nاكتب /cancel للإلغاء.",
+                        'Chinese': "❌ OTP验证码无效。请检查后重试。\n\n输入 /cancel 取消。"
+                    }
+                    bot.send_message(user_id, invalid_messages.get(lang, invalid_messages['English']))
+                    
+                elif status == "code_expired":
+                    expired_messages = {
+                        'English': "⏰ OTP code has expired. Please request a new code.\n\nType /cancel to abort.",
+                        'Arabic': "⏰ انتهت صلاحية رمز OTP. يرجى طلب رمز جديد.\n\nاكتب /cancel للإلغاء.",
+                        'Chinese': "⏰ OTP验证码已过期。请申请新的验证码。\n\n输入 /cancel 取消。"
+                    }
+                    bot.send_message(user_id, expired_messages.get(lang, expired_messages['English']))
+                    
                 else:
-                    bot.reply_to(message, TRANSLATIONS['verification_failed'][lang].format(reason=result))
+                    print(f"❌ Unexpected verification status: {status} for user {user_id}")
+                    error_messages = {
+                        'English': f"❌ Verification failed: {result}\n\nPlease try again or type /cancel to abort.",
+                        'Arabic': f"❌ فشل التحقق: {result}\n\nيرجى المحاولة مرة أخرى أو اكتب /cancel للإلغاء.",
+                        'Chinese': f"❌ 验证失败: {result}\n\n请重试或输入 /cancel 取消。"
+                    }
+                    bot.send_message(user_id, error_messages.get(lang, error_messages['English']))
             except Exception as e:
                 try:
                     bot.delete_message(user_id, waiting_msg.message_id)
@@ -420,11 +444,20 @@ def handle_otp_direct(message):
                     }
                     bot.send_message(user_id, invalid_messages.get(lang, invalid_messages['English']))
                     
+                elif status == "code_expired":
+                    expired_messages = {
+                        'English': "⏰ OTP code has expired. Please request a new code.\n\nType /cancel to abort.",
+                        'Arabic': "⏰ انتهت صلاحية رمز OTP. يرجى طلب رمز جديد.\n\nاكتب /cancel للإلغاء.",
+                        'Chinese': "⏰ OTP验证码已过期。请申请新的验证码。\n\n输入 /cancel 取消。"
+                    }
+                    bot.send_message(user_id, expired_messages.get(lang, expired_messages['English']))
+                    
                 else:
+                    print(f"❌ Unexpected verification status: {status} for user {user_id}")
                     error_messages = {
-                        'English': "❌ Verification failed. Please try again.\n\nType /cancel to abort.",
-                        'Arabic': "❌ فشل التحقق. يرجى المحاولة مرة أخرى.\n\nاكتب /cancel للإلغاء.",
-                        'Chinese': "❌ 验证失败。请重试。\n\n输入 /cancel 取消。"
+                        'English': f"❌ Verification failed: {result}\n\nPlease try again or type /cancel to abort.",
+                        'Arabic': f"❌ فشل التحقق: {result}\n\nيرجى المحاولة مرة أخرى أو اكتب /cancel للإلغاء.",
+                        'Chinese': f"❌ 验证失败: {result}\n\n请重试或输入 /cancel 取消。"
                     }
                     bot.send_message(user_id, error_messages.get(lang, error_messages['English']))
                     

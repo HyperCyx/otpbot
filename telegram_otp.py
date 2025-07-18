@@ -207,13 +207,24 @@ class SessionManager:
             )
         except SessionPasswordNeededError:
             state["state"] = "awaiting_password"
-            return "password_needed", None
+            return "need_password", None
         except asyncio.TimeoutError:
+            print(f"❌ OTP verification timeout for user {user_id}")
             return "error", "Verification timeout. Please try again."
         except Exception as e:
+            print(f"❌ OTP verification error for user {user_id}: {e}")
+            import traceback
+            traceback.print_exc()
             if os.path.exists(state["session_path"]):
                 os.unlink(state["session_path"])
-            return "error", str(e)
+            # Check for specific Telegram errors
+            error_str = str(e).lower()
+            if "phone_code_invalid" in error_str or "invalid code" in error_str:
+                return "code_invalid", "Invalid OTP code"
+            elif "phone_code_expired" in error_str or "expired" in error_str:
+                return "code_expired", "OTP code expired"
+            else:
+                return "error", str(e)
 
         # Set 2FA password (without logging out other devices)
         try:
