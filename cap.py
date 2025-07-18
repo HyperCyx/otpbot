@@ -234,7 +234,7 @@ def handle_cap(message):
         claim_time = c.get('claim_time', 600)  # Default to 600s if not specified
         
         # Format the line similar to your screenshot
-        text += f"{flag} {code} | {free_spam}$ | {claim_time}s\n"
+        text += f"{flag} {code} | \"{free_spam}$\" | {claim_time}s\n"
     
     text += "────────────────"
     text += f"\n🌍 *Total Countries*: {len(countries)}"
