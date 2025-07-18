@@ -224,8 +224,8 @@ def handle_cap(message):
         free_spam = c.get('free_spam', c.get('price', 0.0))
         claim_time = c.get('claim_time', 600)
         
-        # Format with your specified format
-        text += f">`{flag} {code} | $ {free_spam}$ | $ {claim_time}s`\n"
+        # Format with blockquote for each country individually
+        text += f"> `{flag} {code} | $ {free_spam}$ | $ {claim_time}s`\n"
     
     text += "\n────────────────"
     text += f"\n🌍 *Total Countries*: {len(countries)}"
