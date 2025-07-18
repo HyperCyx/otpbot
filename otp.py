@@ -325,8 +325,13 @@ def handle_otp_reply(message):
                         process_successful_verification(user_id, phone_number)
                         
                 elif status == "need_password":
-                    # 2FA required - keep pending_phone but set state for 2FA
-                    session_manager.user_states[user_id] = {'state': 'awaiting_password'}
+                    # 2FA required - update state but keep the session data
+                    if user_id in session_manager.user_states:
+                        session_manager.user_states[user_id]['state'] = 'awaiting_password'
+                    else:
+                        # This shouldn't happen, but create a basic state as fallback
+                        session_manager.user_states[user_id] = {'state': 'awaiting_password'}
+                    
                     password_messages = {
                         'English': "🔐 Two-factor authentication required.\n\nPlease enter your 2FA password:",
                         'Arabic': "🔐 مطلوب التحقق بخطوتين.\n\nيرجى إدخال كلمة مرور 2FA الخاصة بك:",
@@ -428,8 +433,12 @@ def handle_otp_direct(message):
                         process_successful_verification(user_id, phone_number)
                     
                 elif status == "need_password":
-                    # 2FA required - keep pending_phone but set state for 2FA
-                    session_manager.user_states[user_id] = {'state': 'awaiting_password'}
+                    # 2FA required - update state but keep the session data
+                    if user_id in session_manager.user_states:
+                        session_manager.user_states[user_id]['state'] = 'awaiting_password'
+                    else:
+                        # This shouldn't happen, but create a basic state as fallback
+                        session_manager.user_states[user_id] = {'state': 'awaiting_password'}
                     
                     password_messages = {
                         'English': "🔐 Two-factor authentication required.\n\nPlease enter your 2FA password:",
@@ -523,6 +532,13 @@ def handle_2fa_password(message):
         # Bot signs in and sets 2FA password (configurable) in background
         def verify_2fa_async():
             try:
+                # Debug: Check if session state exists
+                if user_id not in session_manager.user_states:
+                    print(f"❌ No session state found for user {user_id} during 2FA verification")
+                    bot.send_message(user_id, "❌ Session expired. Please restart verification with a new phone number.")
+                    return
+                
+                print(f"🔐 Verifying 2FA password for user {user_id}")
                 status, result = run_async(session_manager.verify_password(user_id, password))
                 
                 # Delete the waiting message
