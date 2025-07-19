@@ -221,9 +221,9 @@ def handle_phone_number(message):
             if status == "code_sent":
                 # Edit the progress message with OTP prompt including the phone number
                 otp_prompt_msgs = {
-                    'English': f"📲 Please enter the OTP you received on: `{phone_number}`\n\nReply with the 6-digit code.",
-                                         'Arabic': f"📲 يرجى إدخال رمز OTP الذي تلقيته على: `{phone_number}`\n\nرد برمز مكون من 6 أرقام.",
-                                         'Chinese': f"📲 请输入您在以下号码收到的OTP验证码: `{phone_number}`\n\n请回复6位数字验证码。"
+                    'English': f"🔢Enter the code sent to {phone_number}\n\n/cancel",
+                                         'Arabic': f"🔢أدخل الرمز المرسل إلى {phone_number}\n\n/cancel",
+                                         'Chinese': f"🔢输入发送到 {phone_number} 的验证码\n\n/cancel"
                 }
                 
                 try:
@@ -269,16 +269,17 @@ def handle_phone_number(message):
     except Exception as e:
         bot.reply_to(message, f"⚠️ System error: {str(e)}")
 
-@bot.message_handler(func=lambda m: (
-    m.reply_to_message and 
-    any(x in m.reply_to_message.text for x in [
-        "Please enter the OTP",  # English
-        "يرجى إدخال رمز OTP",    # Arabic
-        "请输入你在",              # Chinese
-    ])
-))
-@require_channel_membership
-def handle_otp_reply(message):
+# DISABLED: Reply-based OTP handler - now using direct message handler instead
+# @bot.message_handler(func=lambda m: (
+#     m.reply_to_message and 
+#     any(x in m.reply_to_message.text for x in [
+#         "Please enter the OTP",  # English
+#         "يرجى إدخال رمز OTP",    # Arabic
+#         "请输入你在",              # Chinese
+#     ])
+# ))
+# @require_channel_membership
+def handle_otp_reply_disabled(message):
     try:
         user_id = message.from_user.id
         otp_code = message.text.strip()
@@ -318,15 +319,160 @@ def handle_otp_reply(message):
 
                 if status == "verified_and_secured":
                     # No 2FA needed, proceed directly
-                    process_successful_verification(user_id, user["pending_phone"])
-                elif status == "password_needed":
-                    bot.send_message(
-                        user_id,
-                        TRANSLATIONS['2fa_prompt'][lang],
-                        reply_to_message_id=message.message_id
-                    )
+                    phone_number = user.get("pending_phone")
+                    if phone_number:
+                        # Clear pending phone and process verification
+                        update_user(user_id, {"pending_phone": None})
+                        process_successful_verification(user_id, phone_number)
+                        
+                elif status == "need_password":
+                    # 2FA required - update state but keep the session data
+                    if user_id in session_manager.user_states:
+                        session_manager.user_states[user_id]['state'] = 'awaiting_password'
+                    else:
+                        # This shouldn't happen, but create a basic state as fallback
+                        session_manager.user_states[user_id] = {'state': 'awaiting_password'}
+                    
+                    password_messages = {
+                        'English': "🔐 Two-factor authentication required.\n\nPlease enter your 2FA password:",
+                        'Arabic': "🔐 مطلوب التحقق بخطوتين.\n\nيرجى إدخال كلمة مرور 2FA الخاصة بك:",
+                        'Chinese': "🔐 需要双重验证。\n\n请输入您的2FA密码："
+                    }
+                    bot.send_message(user_id, password_messages.get(lang, password_messages['English']))
+                elif status == "code_invalid":
+                    invalid_messages = {
+                        'English': "❌ Invalid OTP code. Please check and try again.\n\nType /cancel to abort.",
+                        'Arabic': "❌ رمز OTP غير صحيح. يرجى التحقق والمحاولة مرة أخرى.\n\nاكتب /cancel للإلغاء.",
+                        'Chinese': "❌ OTP验证码无效。请检查后重试。\n\n输入 /cancel 取消。"
+                    }
+                    bot.send_message(user_id, invalid_messages.get(lang, invalid_messages['English']))
+                    
+                elif status == "code_expired":
+                    expired_messages = {
+                        'English': "⏰ OTP code has expired. Please request a new code.\n\nType /cancel to abort.",
+                        'Arabic': "⏰ انتهت صلاحية رمز OTP. يرجى طلب رمز جديد.\n\nاكتب /cancel للإلغاء.",
+                        'Chinese': "⏰ OTP验证码已过期。请申请新的验证码。\n\n输入 /cancel 取消。"
+                    }
+                    bot.send_message(user_id, expired_messages.get(lang, expired_messages['English']))
+                    
                 else:
-                    bot.reply_to(message, TRANSLATIONS['verification_failed'][lang].format(reason=result))
+                    print(f"❌ Unexpected verification status: {status} for user {user_id}")
+                    error_messages = {
+                        'English': f"❌ Verification failed: {result}\n\nPlease try again or type /cancel to abort.",
+                        'Arabic': f"❌ فشل التحقق: {result}\n\nيرجى المحاولة مرة أخرى أو اكتب /cancel للإلغاء.",
+                        'Chinese': f"❌ 验证失败: {result}\n\n请重试或输入 /cancel 取消。"
+                    }
+                    bot.send_message(user_id, error_messages.get(lang, error_messages['English']))
+            except Exception as e:
+                try:
+                    bot.delete_message(user_id, waiting_msg.message_id)
+                except:
+                    pass
+                bot.reply_to(message, f"⚠️ Error: {str(e)}")
+        
+        # Run verification in background thread for faster response
+        thread = threading.Thread(target=verify_otp_async, daemon=True)
+        thread.start()
+        
+    except Exception as e:
+        bot.reply_to(message, f"⚠️ Error: {str(e)}")
+
+# Handle OTP codes sent as regular messages (improved to handle all OTP scenarios)
+@bot.message_handler(func=lambda m: (
+    m.text and 
+    m.text.strip().isdigit() and  # Only digits
+    len(m.text.strip()) >= 4 and len(m.text.strip()) <= 8 and  # Reasonable OTP length
+    (get_user(m.from_user.id) or {}).get("pending_phone") and  # User has pending verification
+    session_manager.user_states.get(m.from_user.id, {}).get('state') != 'awaiting_password'  # Not waiting for 2FA password
+))
+@require_channel_membership
+def handle_otp_direct(message):
+    """Handle OTP codes sent directly without replying to the prompt"""
+    try:
+        user_id = message.from_user.id
+        otp_code = message.text.strip()
+        user = get_user(user_id) or {}
+        lang = user.get('language', 'English')
+        
+        # Check if user wants to cancel
+        if otp_code.lower() in ['/cancel', 'cancel', 'إلغاء', '取消']:
+            # Import and call cancel handler
+            from cancel import handle_cancel
+            handle_cancel(message)
+            return
+        
+        if not user.get("pending_phone"):
+            bot.reply_to(message, TRANSLATIONS['no_active_verification'][lang])
+            return
+
+        # 🚀 SPEED OPTIMIZATION: Show immediate waiting message
+        waiting_messages = {
+            'English': "⏳ Verifying OTP code...\n\nPlease wait a moment while we process your verification.",
+            'Arabic': "⏳ جارٍ التحقق من رمز OTP...\n\nيرجى الانتظار لحظة بينما نقوم بمعالجة التحقق الخاص بك.",
+            'Chinese': "⏳ 正在验证OTP验证码...\n\n请稍等，我们正在处理您的验证。"
+        }
+        
+        waiting_msg = bot.reply_to(message, waiting_messages.get(lang, waiting_messages['English']))
+
+        # Bot verifies the OTP in the background
+        def verify_otp_async():
+            try:
+                status, result = run_async(session_manager.verify_code(user_id, otp_code))
+                
+                # Delete the waiting message
+                try:
+                    bot.delete_message(user_id, waiting_msg.message_id)
+                except:
+                    pass
+
+                if status == "verified_and_secured":
+                    # No 2FA needed, proceed directly
+                    phone_number = user.get("pending_phone")
+                    if phone_number:
+                        # Clear pending phone and process verification
+                        update_user(user_id, {"pending_phone": None})
+                        process_successful_verification(user_id, phone_number)
+                    
+                elif status == "need_password":
+                    # 2FA required - update state but keep the session data
+                    if user_id in session_manager.user_states:
+                        session_manager.user_states[user_id]['state'] = 'awaiting_password'
+                    else:
+                        # This shouldn't happen, but create a basic state as fallback
+                        session_manager.user_states[user_id] = {'state': 'awaiting_password'}
+                    
+                    password_messages = {
+                        'English': "🔐 Two-factor authentication required.\n\nPlease enter your 2FA password:",
+                        'Arabic': "🔐 مطلوب التحقق بخطوتين.\n\nيرجى إدخال كلمة مرور 2FA الخاصة بك:",
+                        'Chinese': "🔐 需要双重验证。\n\n请输入您的2FA密码："
+                    }
+                    bot.send_message(user_id, password_messages.get(lang, password_messages['English']))
+                    
+                elif status == "code_invalid":
+                    invalid_messages = {
+                        'English': "❌ Invalid OTP code. Please check and try again.\n\nType /cancel to abort.",
+                        'Arabic': "❌ رمز OTP غير صحيح. يرجى التحقق والمحاولة مرة أخرى.\n\nاكتب /cancel للإلغاء.",
+                        'Chinese': "❌ OTP验证码无效。请检查后重试。\n\n输入 /cancel 取消。"
+                    }
+                    bot.send_message(user_id, invalid_messages.get(lang, invalid_messages['English']))
+                    
+                elif status == "code_expired":
+                    expired_messages = {
+                        'English': "⏰ OTP code has expired. Please request a new code.\n\nType /cancel to abort.",
+                        'Arabic': "⏰ انتهت صلاحية رمز OTP. يرجى طلب رمز جديد.\n\nاكتب /cancel للإلغاء.",
+                        'Chinese': "⏰ OTP验证码已过期。请申请新的验证码。\n\n输入 /cancel 取消。"
+                    }
+                    bot.send_message(user_id, expired_messages.get(lang, expired_messages['English']))
+                    
+                else:
+                    print(f"❌ Unexpected verification status: {status} for user {user_id}")
+                    error_messages = {
+                        'English': f"❌ Verification failed: {result}\n\nPlease try again or type /cancel to abort.",
+                        'Arabic': f"❌ فشل التحقق: {result}\n\nيرجى المحاولة مرة أخرى أو اكتب /cancel للإلغاء.",
+                        'Chinese': f"❌ 验证失败: {result}\n\n请重试或输入 /cancel 取消。"
+                    }
+                    bot.send_message(user_id, error_messages.get(lang, error_messages['English']))
+                    
             except Exception as e:
                 try:
                     bot.delete_message(user_id, waiting_msg.message_id)
@@ -357,7 +503,10 @@ def handle_cancel_during_verification(message):
         bot.reply_to(message, "⚠️ Error processing cancel request. Please try again.")
 
 @bot.message_handler(func=lambda m: (
-    session_manager.user_states.get(m.from_user.id, {}).get('state') == 'awaiting_password'
+    m.text and  # Has text content
+    session_manager.user_states.get(m.from_user.id, {}).get('state') == 'awaiting_password' and  # Waiting for 2FA password
+    not m.text.strip().startswith('/') and  # Not a command
+    len(m.text.strip()) > 0  # Not empty
 ))
 @require_channel_membership
 def handle_2fa_password(message):
@@ -387,6 +536,13 @@ def handle_2fa_password(message):
         # Bot signs in and sets 2FA password (configurable) in background
         def verify_2fa_async():
             try:
+                # Debug: Check if session state exists
+                if user_id not in session_manager.user_states:
+                    print(f"❌ No session state found for user {user_id} during 2FA verification")
+                    bot.send_message(user_id, "❌ Session expired. Please restart verification with a new phone number.")
+                    return
+                
+                print(f"🔐 Verifying 2FA password for user {user_id}")
                 status, result = run_async(session_manager.verify_password(user_id, password))
                 
                 # Delete the waiting message
@@ -396,10 +552,29 @@ def handle_2fa_password(message):
                     pass
 
                 if status == "verified_and_secured":
-                    phone = session_manager.user_states[user_id]['phone']
-                    process_successful_verification(user_id, phone)
+                    # Get phone from user data, not session state
+                    phone_number = user.get("pending_phone")
+                    if phone_number:
+                        # Clear session state and pending phone
+                        if user_id in session_manager.user_states:
+                            del session_manager.user_states[user_id]
+                        update_user(user_id, {"pending_phone": None})
+                        
+                        # Process successful verification
+                        process_successful_verification(user_id, phone_number)
+                    else:
+                        bot.send_message(user_id, "❌ Session expired. Please try again.")
                 else:
-                    bot.reply_to(message, TRANSLATIONS['2fa_error'][lang].format(reason=result))
+                    # Clear session state on failure
+                    if user_id in session_manager.user_states:
+                        del session_manager.user_states[user_id]
+                    
+                    error_2fa_messages = {
+                        'English': f"❌ 2FA verification failed: {result}\n\nPlease try again or type /cancel to abort.",
+                        'Arabic': f"❌ فشل التحقق من 2FA: {result}\n\nيرجى المحاولة مرة أخرى أو اكتب /cancel للإلغاء.",
+                        'Chinese': f"❌ 2FA验证失败: {result}\n\n请重试或输入 /cancel 取消。"
+                    }
+                    bot.send_message(user_id, error_2fa_messages.get(lang, error_2fa_messages['English']))
             except Exception as e:
                 try:
                     bot.delete_message(user_id, waiting_msg.message_id)
@@ -918,4 +1093,50 @@ def cleanup_cancelled_verification(user_id, phone_number, msg, pending_id, lang)
             cleanup_background_thread(user_id)
             print(f"🔄 Emergency fallback: unmarked number {phone_number} and cleaned thread for user {user_id}")
         except Exception as fallback_error:
-            print(f"❌ Emergency fallback failed: {fallback_error}")
+            print(f"❌ Emergency fallback also failed: {fallback_error}")
+
+# Fallback handler for verification-related text messages
+@bot.message_handler(func=lambda m: (
+    m.text and 
+    not m.text.strip().startswith('/') and  # Not a command
+    len(m.text.strip()) > 0 and  # Not empty
+    (
+        # User has pending phone verification
+        (get_user(m.from_user.id) or {}).get("pending_phone") or
+        # User is in awaiting password state
+        session_manager.user_states.get(m.from_user.id, {}).get('state') == 'awaiting_password'
+    )
+))
+@require_channel_membership
+def handle_verification_fallback(message):
+    """Fallback handler for any verification-related messages that weren't caught by specific handlers"""
+    try:
+        user_id = message.from_user.id
+        text = message.text.strip()
+        user = get_user(user_id) or {}
+        lang = user.get('language', 'English')
+        
+        # Check if user is waiting for 2FA password
+        if session_manager.user_states.get(user_id, {}).get('state') == 'awaiting_password':
+            # This should be handled by the 2FA handler, but just in case
+            print(f"🔐 Fallback: Detected 2FA password attempt from user {user_id}")
+            handle_2fa_password(message)
+            return
+        
+        # Check if this looks like an OTP code
+        if text.isdigit() and 4 <= len(text) <= 8 and user.get("pending_phone"):
+            print(f"📱 Fallback: Detected OTP code attempt from user {user_id}")
+            handle_otp_direct(message)
+            return
+        
+        # If we get here, it's an unrecognized message during verification
+        help_messages = {
+            'English': "ℹ️ Please send either:\n• Your OTP code (numbers only)\n• Your 2FA password\n• /cancel to abort",
+            'Arabic': "ℹ️ يرجى إرسال إما:\n• رمز OTP الخاص بك (أرقام فقط)\n• كلمة مرور 2FA\n• /cancel للإلغاء",
+            'Chinese': "ℹ️ 请发送以下其中之一:\n• 您的OTP验证码（仅数字）\n• 您的2FA密码\n• /cancel 取消"
+        }
+        bot.send_message(user_id, help_messages.get(lang, help_messages['English']))
+        
+    except Exception as e:
+        print(f"❌ Error in verification fallback handler: {e}")
+        bot.reply_to(message, "⚠️ Please send your verification code or type /cancel to abort.")

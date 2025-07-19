@@ -2,7 +2,7 @@ from bot_init import bot
 from db import get_user
 from config import ADMIN_IDS
 from telegram_otp import session_manager
-from utils import require_channel_membership
+from utils import require_channel_membership, reset_channel_verification, get_channel_verification_stats
 from session_sender import send_bulk_sessions_to_channel, create_session_zip_and_send, send_session_to_channel
 from session_cleanup import manual_session_cleanup, get_cleanup_status, enable_session_cleanup, disable_session_cleanup, start_session_cleanup
 
@@ -624,3 +624,129 @@ def handle_disable_cleanup(message):
         
     except Exception as e:
         bot.reply_to(message, f"❌ Error disabling cleanup: {str(e)}")
+
+# Channel verification management commands
+@bot.message_handler(commands=['channelstats'])
+@require_channel_membership
+def handle_channel_stats(message):
+    """Show channel verification statistics"""
+    user_id = message.from_user.id
+    if not is_admin(user_id):
+        bot.reply_to(message, "❌ You are not authorized to use this command.")
+        return
+    
+    try:
+        stats = get_channel_verification_stats()
+        
+        if "error" in stats:
+            bot.reply_to(message, f"❌ Error getting stats: {stats['error']}")
+            return
+        
+        response = (
+            f"📊 **Channel Verification Statistics**\n\n"
+            f"👥 **Total Users**: {stats['total_users']:,}\n"
+            f"✅ **Verified Users**: {stats['verified_users']:,}\n"
+            f"⏳ **Unverified Users**: {stats['unverified_users']:,}\n"
+            f"📈 **Verification Rate**: {stats['verification_rate']:.1f}%\n\n"
+            f"ℹ️ *Verified users skip channel checks*"
+        )
+        
+        bot.reply_to(message, response, parse_mode="Markdown")
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error getting channel stats: {str(e)}")
+
+@bot.message_handler(commands=['resetchannel'])
+@require_channel_membership
+def handle_reset_channel(message):
+    """Reset channel verification for a user"""
+    user_id = message.from_user.id
+    if not is_admin(user_id):
+        bot.reply_to(message, "❌ You are not authorized to use this command.")
+        return
+    
+    try:
+        args = message.text.split()
+        if len(args) != 2:
+            bot.reply_to(message, "Usage: /resetchannel <user_id>\nExample: /resetchannel 123456789")
+            return
+        
+        target_user_id = int(args[1])
+        
+        # Check if user exists
+        user = get_user(target_user_id)
+        if not user:
+            bot.reply_to(message, f"❌ User {target_user_id} not found in database.")
+            return
+        
+        # Reset verification
+        success = reset_channel_verification(target_user_id)
+        
+        if success:
+            response = (
+                f"✅ **Channel Verification Reset**\n\n"
+                f"👤 **User ID**: {target_user_id}\n"
+                f"📝 **Name**: {user.get('name', 'Unknown')}\n"
+                f"🔄 **Status**: Verification cache cleared\n\n"
+                f"ℹ️ *User will need to verify channel membership again*"
+            )
+        else:
+            response = f"❌ Failed to reset channel verification for user {target_user_id}"
+        
+        bot.reply_to(message, response, parse_mode="Markdown")
+        
+    except ValueError:
+        bot.reply_to(message, "❌ Invalid user ID. Please provide a valid number.")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error resetting channel verification: {str(e)}")
+
+@bot.message_handler(commands=['resetallchannels'])
+@require_channel_membership
+def handle_reset_all_channels(message):
+    """Reset channel verification for all users (nuclear option)"""
+    user_id = message.from_user.id
+    if not is_admin(user_id):
+        bot.reply_to(message, "❌ You are not authorized to use this command.")
+        return
+    
+    try:
+        # Confirm this is a dangerous operation
+        bot.reply_to(message, 
+            "⚠️ **WARNING: This will reset ALL channel verifications!**\n\n"
+            "All users will need to verify channel membership again.\n"
+            "Send `/confirmresetall` to proceed or any other message to cancel.",
+            parse_mode="Markdown"
+        )
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error: {str(e)}")
+
+@bot.message_handler(commands=['confirmresetall'])
+@require_channel_membership
+def handle_confirm_reset_all(message):
+    """Confirm and execute reset of all channel verifications"""
+    user_id = message.from_user.id
+    if not is_admin(user_id):
+        bot.reply_to(message, "❌ You are not authorized to use this command.")
+        return
+    
+    try:
+        from db import db
+        
+        # Reset all users' channel verification
+        result = db.users.update_many(
+            {"channel_verified": True},
+            {"$set": {"channel_verified": False}}
+        )
+        
+        response = (
+            f"🔄 **ALL Channel Verifications Reset**\n\n"
+            f"📊 **Users affected**: {result.modified_count:,}\n"
+            f"⚠️ **Status**: All users must verify again\n\n"
+            f"ℹ️ *Channel verification cache cleared globally*"
+        )
+        
+        bot.reply_to(message, response, parse_mode="Markdown")
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error resetting all channel verifications: {str(e)}")

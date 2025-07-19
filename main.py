@@ -29,6 +29,7 @@ import admin_delete_sessions
 import device_sessions
 import admin_device_check
 import session_cleanup
+import temp_session_cleanup
 import threading
 from flask import Flask, jsonify
 
@@ -50,6 +51,9 @@ def main():
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     
+    # Start the temporary session cleanup scheduler (always enabled)
+    temp_session_cleanup.start_cleanup_scheduler()
+    
     # Session cleanup is disabled by default - admin must enable it
     print("🧹 Session cleanup is DISABLED by default - use /enablecleanup to turn it on")
     
@@ -59,6 +63,7 @@ def main():
         print(f"Bot crashed: {str(e)}")
         # Stop session cleanup on shutdown if running
         session_cleanup.stop_session_cleanup()
+        temp_session_cleanup.stop_cleanup_scheduler()
         # Add any cleanup or restart logic here
 
 if __name__ == "__main__":

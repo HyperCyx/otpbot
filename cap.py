@@ -238,15 +238,16 @@ def handle_cap(message):
         # Escape special characters for MarkdownV2
         code_escaped = escape_md_v2(code)
         price_escaped = escape_md_v2(str(free_spam))
+        claim_time_escaped = escape_md_v2(str(claim_time))
         
         # Each country in its own blockquote with copyable code
-        country_lines.append(f"> `{flag} {code_escaped} \\| $ {price_escaped}$ \\| $ {claim_time}s`")
+        country_lines.append(f"> {flag} `{code_escaped}` \\| \\$ {price_escaped}\\$ \\| \\$ {claim_time_escaped}s")
 
-    # Combine all parts
+    # Combine all parts - need empty line between blockquotes to keep them separate
     full_message = (
         header +
-        "\n".join(country_lines) +
-        "────────────────\n" +
+        "\n\n".join(country_lines) +
+        "\n\n────────────────\n" +
         f"🌍 *Total Countries*: {len(countries)}\n\n"
     )
     
