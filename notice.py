@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 client = MongoClient(MONGO_URI)
-db = client['telegram_test_sell']  # Fixed database name to match db.py
+db = client['telegram_id_sell']  # Fixed database name to match db.py
 
 @bot.message_handler(commands=['notice'])
 @require_channel_membership
