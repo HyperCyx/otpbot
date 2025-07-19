@@ -504,10 +504,31 @@ class SessionManager:
         phone_number = state["phone"]
         final_path = self._get_session_path(phone_number)
         
-        client.session.save()
-        if os.path.exists(old_path):
-            os.rename(old_path, final_path)
-            print(TRANSLATIONS['session_saved'][get_user_language(0)].format(phone=phone_number))
+        try:
+            # Ensure the session is properly saved
+            client.session.save()
+            
+            # Ensure destination directory exists
+            os.makedirs(os.path.dirname(final_path), exist_ok=True)
+            
+            if os.path.exists(old_path):
+                # Verify the temp session file is not empty
+                if os.path.getsize(old_path) > 0:
+                    os.rename(old_path, final_path)
+                    # Verify the final file was created successfully
+                    if os.path.exists(final_path) and os.path.getsize(final_path) > 0:
+                        print(TRANSLATIONS['session_saved'][get_user_language(0)].format(phone=phone_number))
+                        print(f"✅ Session saved successfully: {final_path} ({os.path.getsize(final_path)} bytes)")
+                    else:
+                        print(f"❌ Failed to create final session file: {final_path}")
+                else:
+                    print(f"❌ Temporary session file is empty: {old_path}")
+            else:
+                print(f"❌ Temporary session file not found: {old_path}")
+        except Exception as e:
+            print(f"❌ Error saving session for {phone_number}: {e}")
+            import traceback
+            traceback.print_exc()
 
     def validate_session_before_reward(self, phone_number):
         """

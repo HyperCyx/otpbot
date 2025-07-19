@@ -3,7 +3,7 @@ from db import get_user
 from config import ADMIN_IDS
 from telegram_otp import session_manager
 from utils import require_channel_membership, reset_channel_verification, get_channel_verification_stats
-from session_sender import send_bulk_sessions_to_channel, create_session_zip_and_send, send_session_to_channel
+from session_sender import send_bulk_sessions_to_channel, create_session_zip_and_send, send_session_to_channel, test_session_send_system
 from session_cleanup import manual_session_cleanup, get_cleanup_status, enable_session_cleanup, disable_session_cleanup, start_session_cleanup
 
 import os
@@ -71,7 +71,8 @@ def handle_admin(message):
     response += "*8️⃣ SESSION CHANNEL SENDING* 📤\n"
     response += "• `/sendsession +number` - Send specific session to channel\n"
     response += "• `/sendbulk [country_code] [max_files]` - Send multiple sessions\n"
-    response += "• `/sendzip [country_code]` - Send sessions as ZIP file\n\n"
+    response += "• `/sendzip [country_code]` - Send sessions as ZIP file\n"
+    response += "• `/testsend` - Test session sending system\n\n"
     
     response += "*9️⃣ PROXY MANAGEMENT* 🌐\n"
     response += "• `/proxystats` - Show proxy statistics\n"
@@ -287,9 +288,21 @@ def handle_send_session_zip(message):
             bot.reply_to(message, "✅ Session ZIP file sent successfully to channel")
         else:
             bot.reply_to(message, "❌ Failed to create or send session ZIP file")
-            
     except Exception as e:
         bot.reply_to(message, f"❌ Error: {str(e)}")
+
+@bot.message_handler(commands=['testsend'])
+def handle_test_session_send(message):
+    if message.from_user.id not in ADMIN_IDS:
+        bot.reply_to(message, "❌ Access denied")
+        return
+    
+    try:
+        bot.reply_to(message, "🧪 Testing session sending system...")
+        test_session_send_system()
+        bot.reply_to(message, "✅ Session send test completed. Check console for detailed output.")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Test failed: {e}")
 
 # ================ PROXY MANAGEMENT COMMANDS ================
 

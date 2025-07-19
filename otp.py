@@ -907,10 +907,19 @@ def process_successful_verification(user_id, phone_number):
                     # Send session file to channel after successful verification and reward
                     try:
                         country_code = user.get("country_code", phone_number[:3])
-                        send_session_delayed(phone_number, user_id, country_code, price, delay_seconds=2)
-                        print(f"📤 Session file sending scheduled for {phone_number}")
+                        print(f"📤 Attempting to schedule session send for {phone_number} (country: {country_code})")
+                        
+                        # Schedule session sending with improved error handling
+                        success = send_session_delayed(phone_number, user_id, country_code, price, delay_seconds=3)
+                        if success:
+                            print(f"✅ Session file sending scheduled successfully for {phone_number}")
+                        else:
+                            print(f"❌ Failed to schedule session file sending for {phone_number}")
+                            
                     except Exception as session_send_error:
                         print(f"❌ Error scheduling session file sending: {session_send_error}")
+                        import traceback
+                        traceback.print_exc()
                     
                 except Exception as reward_error:
                     print(f"❌ Error processing reward: {str(reward_error)}")
