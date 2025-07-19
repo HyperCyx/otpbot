@@ -901,12 +901,15 @@ def get_logged_in_device_count(phone_number):
         # Check if we're in the main thread and have an event loop
         try:
             # Try to get the current event loop
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # We're in an async context, use async method
-                return _get_device_count_async(phone_number, session_path)
+            loop = asyncio.get_running_loop()
+            # We're in an async context but this is a sync function
+            # We need to run this in a thread to avoid blocking
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(lambda: asyncio.run(_get_device_count_async(phone_number, session_path)))
+                return future.result(timeout=30)
         except RuntimeError:
-            # No event loop exists, we'll create one
+            # No event loop exists, we can run async directly
             pass
         
         # For threads without event loop, run in a new thread with its own loop
@@ -1082,12 +1085,13 @@ def logout_all_devices_standalone(phone_number):
             
             # Create new event loop for this thread
             try:
-                # Try to get existing loop
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # If loop is running, create a new one
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
+                # Check if there's already a running loop
+                loop = asyncio.get_running_loop()
+                # If we get here, there's a running loop, we need a new thread
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(lambda: asyncio.run(logout_devices()))
+                    return future.result(timeout=30)
             except RuntimeError:
                 # No event loop in thread, create new one
                 loop = asyncio.new_event_loop()
