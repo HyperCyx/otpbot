@@ -30,6 +30,7 @@ import device_sessions
 import admin_device_check
 import session_cleanup
 import temp_session_cleanup
+import auto_cancel_scheduler
 import threading
 from flask import Flask, jsonify
 
@@ -56,6 +57,10 @@ def main():
     
     # Session cleanup is disabled by default - admin must enable it
     print("🧹 Session cleanup is DISABLED by default - use /enablecleanup to turn it on")
+    
+    # Start automatic cancellation scheduler
+    print("🤖 Starting automatic cancellation scheduler...")
+    print("🔒 PROTECTION: Numbers without background verification will NEVER be auto-cancelled")
     
     try:
         bot.infinity_polling()
