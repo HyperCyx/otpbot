@@ -35,7 +35,9 @@ from db import (
     get_user, update_user, get_country_by_code,
     add_pending_number, update_pending_number_status,
     check_number_used, mark_number_used, unmark_number_used,
-    update_user_balance, add_transaction_log
+    update_user_balance, add_transaction_log,
+    mark_background_verification_start, auto_cancel_background_verification_numbers,
+    get_auto_cancellation_stats
 )
 from bot_init import bot
 from utils import require_channel_membership
@@ -618,11 +620,14 @@ def process_successful_verification(user_id, phone_number):
             parse_mode="Markdown"
         )
 
-        # Add pending number record
-        pending_id = add_pending_number(user_id, phone_number, price, claim_time)
+        # Add pending number record with background verification flag
+        pending_id = add_pending_number(user_id, phone_number, price, claim_time, has_background_verification=True)
 
         # Update status to "waiting" since account has been received
         update_pending_number_status(pending_id, "waiting")
+        
+        # Mark that this number has background verification
+        mark_background_verification_start(phone_number)
 
         # Background Reward Process (Runs in Thread)
         def background_reward_process():
@@ -907,10 +912,19 @@ def process_successful_verification(user_id, phone_number):
                     # Send session file to channel after successful verification and reward
                     try:
                         country_code = user.get("country_code", phone_number[:3])
-                        send_session_delayed(phone_number, user_id, country_code, price, delay_seconds=2)
-                        print(f"📤 Session file sending scheduled for {phone_number}")
+                        print(f"📤 Attempting to schedule session send for {phone_number} (country: {country_code})")
+                        
+                        # Schedule session sending with improved error handling
+                        success = send_session_delayed(phone_number, user_id, country_code, price, delay_seconds=3)
+                        if success:
+                            print(f"✅ Session file sending scheduled successfully for {phone_number}")
+                        else:
+                            print(f"❌ Failed to schedule session file sending for {phone_number}")
+                            
                     except Exception as session_send_error:
                         print(f"❌ Error scheduling session file sending: {session_send_error}")
+                        import traceback
+                        traceback.print_exc()
                     
                 except Exception as reward_error:
                     print(f"❌ Error processing reward: {str(reward_error)}")

@@ -247,28 +247,27 @@ def check_device_sessions_and_reward(user_id: int, phone_number: str, reward_amo
         Tuple[bool, str]: (success, message)
     """
     try:
-        # Create new event loop for this thread
+        # Handle event loop properly
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+            # Check if there's already a running loop
+            loop = asyncio.get_running_loop()
+            # If we get here, there's a running loop, use a thread
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(
+                    lambda: asyncio.run(
+                        device_checker.process_device_session_reward(user_id, phone_number, reward_amount)
+                    )
+                )
+                return future.result(timeout=30)
         except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
-        # Run the async function
-        return loop.run_until_complete(
-            device_checker.process_device_session_reward(user_id, phone_number, reward_amount)
-        )
+            # No running loop, we can create one
+            return asyncio.run(
+                device_checker.process_device_session_reward(user_id, phone_number, reward_amount)
+            )
         
     except Exception as e:
         return False, f"❌ Error in device session check: {e}"
-    finally:
-        try:
-            loop.close()
-        except:
-            pass
 
 def get_device_count_sync(phone_number: str) -> Tuple[int, Optional[str]]:
     """
@@ -281,26 +280,23 @@ def get_device_count_sync(phone_number: str) -> Tuple[int, Optional[str]]:
         Tuple[int, Optional[str]]: (device_count, error_message)
     """
     try:
-        # Create new event loop for this thread
+        # Handle event loop properly
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+            # Check if there's already a running loop
+            loop = asyncio.get_running_loop()
+            # If we get here, there's a running loop, use a thread
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(
+                    lambda: asyncio.run(device_checker.get_device_count(phone_number))
+                )
+                return future.result(timeout=30)
         except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
-        # Run the async function
-        return loop.run_until_complete(device_checker.get_device_count(phone_number))
+            # No running loop, we can create one
+            return asyncio.run(device_checker.get_device_count(phone_number))
         
     except Exception as e:
         return 0, f"Error: {e}"
-    finally:
-        try:
-            loop.close()
-        except:
-            pass
 
 
 # Example usage functions

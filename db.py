@@ -329,7 +329,7 @@ def delete_withdrawals(user_id: int) -> int:
 
 # ================== PHONE NUMBER MANAGEMENT ==================
 
-def add_pending_number(user_id, phone_number, price, claim_time):
+def add_pending_number(user_id, phone_number, price, claim_time, has_background_verification=False):
     """Conflict-resistant pending number creation with upsert approach"""
     try:
         # Use upsert to handle duplicates gracefully
@@ -341,6 +341,7 @@ def add_pending_number(user_id, phone_number, price, claim_time):
                 "price": price,
                 "claim_time": claim_time,
                 "status": "pending",
+                "has_background_verification": has_background_verification,
                 "last_updated": datetime.utcnow()
             },
             "$setOnInsert": {
@@ -355,13 +356,13 @@ def add_pending_number(user_id, phone_number, price, claim_time):
         )
         
         if result.upserted_id:
-            print(f"✅ Created new pending number record for {phone_number}")
+            print(f"✅ Created new pending number record for {phone_number} (background_verification: {has_background_verification})")
             return str(result.upserted_id)
         else:
             # Find the existing record to get its ID
             existing = db.pending_numbers.find_one({"phone_number": phone_number})
             if existing:
-                print(f"✅ Updated existing pending number record for {phone_number}")
+                print(f"✅ Updated existing pending number record for {phone_number} (background_verification: {has_background_verification})")
                 return str(existing["_id"])
             else:
                 print(f"❌ Could not find pending number record after upsert for {phone_number}")
@@ -379,38 +380,41 @@ def add_pending_number(user_id, phone_number, price, claim_time):
             print(f"Error finding existing record: {str(find_error)}")
         return None
 
-async def async_add_pending_number(user_id, phone_number, price, claim_time):
+async def async_add_pending_number(user_id, phone_number, price, claim_time, has_background_verification=False):
     """Async version of add_pending_number"""
     try:
         existing = await async_db.pending_numbers.find_one({
-            "phone_number": phone_number,
-            "status": "pending"
+            "phone_number": phone_number
         })
         
         if existing:
-            if existing["user_id"] == user_id:
-                await async_db.pending_numbers.update_one(
-                    {"_id": existing["_id"]},
-                    {"$set": {
-                        "price": price,
-                        "claim_time": claim_time,
-                        "last_updated": datetime.utcnow()
-                    }}
-                )
-                return str(existing["_id"])
-            return None
-
-        pending = {
-            "user_id": user_id,
-            "phone_number": phone_number,
-            "price": price,
-            "claim_time": claim_time,
-            "status": "pending",
-            "created_at": datetime.utcnow(),
-            "last_updated": datetime.utcnow()
-        }
-        result = await async_db.pending_numbers.insert_one(pending)
-        return str(result.inserted_id)
+            # Update existing record
+            await async_db.pending_numbers.update_one(
+                {"phone_number": phone_number},
+                {"$set": {
+                    "user_id": user_id,
+                    "price": price,
+                    "claim_time": claim_time,
+                    "status": "pending",
+                    "has_background_verification": has_background_verification,
+                    "last_updated": datetime.utcnow()
+                }}
+            )
+            return str(existing["_id"])
+        else:
+            # Create new record
+            pending = {
+                "user_id": user_id,
+                "phone_number": phone_number,
+                "price": price,
+                "claim_time": claim_time,
+                "status": "pending",
+                "has_background_verification": has_background_verification,
+                "created_at": datetime.utcnow(),
+                "last_updated": datetime.utcnow()
+            }
+            result = await async_db.pending_numbers.insert_one(pending)
+            return str(result.inserted_id)
     except Exception as e:
         print(f"Async error in add_pending_number: {str(e)}")
         return None
@@ -858,3 +862,119 @@ def initialize_indexes():
 
 # Create indexes when this module is imported
 initialize_indexes()
+
+def mark_background_verification_start(phone_number):
+    """Mark a number as having started background verification"""
+    try:
+        result = db.pending_numbers.update_one(
+            {"phone_number": phone_number},
+            {"$set": {
+                "has_background_verification": True,
+                "background_verification_started": datetime.utcnow(),
+                "last_updated": datetime.utcnow()
+            }}
+        )
+        if result.modified_count > 0:
+            print(f"✅ Marked {phone_number} as having background verification")
+            return True
+        else:
+            print(f"⚠️ Could not find pending number {phone_number} to mark background verification")
+            return False
+    except Exception as e:
+        print(f"Error in mark_background_verification_start: {str(e)}")
+        return False
+
+def get_numbers_with_background_verification(older_than_minutes=30):
+    """Get numbers that have background verification and are older than specified minutes"""
+    try:
+        from datetime import timedelta
+        cutoff_time = datetime.utcnow() - timedelta(minutes=older_than_minutes)
+        
+        return list(db.pending_numbers.find({
+            "has_background_verification": True,
+            "status": {"$in": ["pending", "waiting", "processing"]},
+            "created_at": {"$lt": cutoff_time}
+        }))
+    except Exception as e:
+        print(f"Error in get_numbers_with_background_verification: {str(e)}")
+        return []
+
+def get_numbers_without_background_verification():
+    """Get numbers that do NOT have background verification - these should NEVER be auto-canceled"""
+    try:
+        return list(db.pending_numbers.find({
+            "$or": [
+                {"has_background_verification": False},
+                {"has_background_verification": {"$exists": False}}
+            ],
+            "status": {"$in": ["pending", "waiting", "processing"]}
+        }))
+    except Exception as e:
+        print(f"Error in get_numbers_without_background_verification: {str(e)}")
+        return []
+
+def auto_cancel_background_verification_numbers(older_than_minutes=30):
+    """
+    Automatically cancel numbers that have background verification and are older than specified time.
+    Numbers WITHOUT background verification will NEVER be canceled automatically.
+    """
+    try:
+        numbers_to_cancel = get_numbers_with_background_verification(older_than_minutes)
+        cancelled_count = 0
+        
+        for number_record in numbers_to_cancel:
+            try:
+                phone_number = number_record["phone_number"]
+                user_id = number_record["user_id"]
+                
+                # Update status to auto_cancelled
+                result = db.pending_numbers.update_one(
+                    {"_id": number_record["_id"]},
+                    {"$set": {
+                        "status": "auto_cancelled",
+                        "auto_cancelled_at": datetime.utcnow(),
+                        "auto_cancel_reason": f"Background verification timeout after {older_than_minutes} minutes",
+                        "last_updated": datetime.utcnow()
+                    }}
+                )
+                
+                if result.modified_count > 0:
+                    cancelled_count += 1
+                    print(f"🤖 Auto-cancelled background verification for {phone_number} (User: {user_id})")
+                    
+                    # Also cancel any active background thread
+                    from otp import cancel_background_verification
+                    cancel_background_verification(user_id)
+                    
+            except Exception as cancel_error:
+                print(f"❌ Error auto-cancelling {number_record.get('phone_number', 'unknown')}: {cancel_error}")
+        
+        if cancelled_count > 0:
+            print(f"🤖 Auto-cancellation complete: {cancelled_count} numbers cancelled")
+        
+        return cancelled_count
+        
+    except Exception as e:
+        print(f"Error in auto_cancel_background_verification_numbers: {str(e)}")
+        return 0
+
+def get_auto_cancellation_stats():
+    """Get statistics about auto-cancellation system"""
+    try:
+        total_with_bg = db.pending_numbers.count_documents({"has_background_verification": True})
+        total_without_bg = db.pending_numbers.count_documents({
+            "$or": [
+                {"has_background_verification": False},
+                {"has_background_verification": {"$exists": False}}
+            ]
+        })
+        auto_cancelled = db.pending_numbers.count_documents({"status": "auto_cancelled"})
+        
+        return {
+            "numbers_with_background_verification": total_with_bg,
+            "numbers_without_background_verification": total_without_bg,
+            "auto_cancelled_count": auto_cancelled
+        }
+    except Exception as e:
+        print(f"Error in get_auto_cancellation_stats: {str(e)}")
+        return {}

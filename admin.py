@@ -3,8 +3,13 @@ from db import get_user
 from config import ADMIN_IDS
 from telegram_otp import session_manager
 from utils import require_channel_membership, reset_channel_verification, get_channel_verification_stats
-from session_sender import send_bulk_sessions_to_channel, create_session_zip_and_send, send_session_to_channel
+from session_sender import send_bulk_sessions_to_channel, create_session_zip_and_send, send_session_to_channel, test_session_send_system
 from session_cleanup import manual_session_cleanup, get_cleanup_status, enable_session_cleanup, disable_session_cleanup, start_session_cleanup
+from auto_cancel_scheduler import (
+    get_scheduler_status, force_auto_cancel_check, 
+    update_auto_cancel_settings, start_auto_cancel_scheduler, 
+    stop_auto_cancel_scheduler
+)
 
 import os
 
@@ -71,9 +76,17 @@ def handle_admin(message):
     response += "*8️⃣ SESSION CHANNEL SENDING* 📤\n"
     response += "• `/sendsession +number` - Send specific session to channel\n"
     response += "• `/sendbulk [country_code] [max_files]` - Send multiple sessions\n"
-    response += "• `/sendzip [country_code]` - Send sessions as ZIP file\n\n"
+    response += "• `/sendzip [country_code]` - Send sessions as ZIP file\n"
+    response += "• `/testsend` - Test session sending system\n\n"
     
-    response += "*9️⃣ PROXY MANAGEMENT* 🌐\n"
+    response += "*9️⃣ AUTO-CANCELLATION SYSTEM* 🤖\n"
+    response += "• `/autocancelstatus` - Show auto-cancellation status\n"
+    response += "• `/forceautocancel` - Force immediate auto-cancellation check\n"
+    response += "• `/autocancelsettings [timeout_minutes]` - Update timeout settings\n"
+    response += "• `/enableautocancel` - Enable automatic cancellation\n"
+    response += "• `/disableautocancel` - Disable automatic cancellation\n\n"
+    
+    response += "*🔟 PROXY MANAGEMENT* 🌐\n"
     response += "• `/proxystats` - Show proxy statistics\n"
     response += "• `/resetproxies` - Reset failed proxy list\n"
     response += "• `/reloadproxies` - Reload proxy configuration\n"
@@ -287,9 +300,21 @@ def handle_send_session_zip(message):
             bot.reply_to(message, "✅ Session ZIP file sent successfully to channel")
         else:
             bot.reply_to(message, "❌ Failed to create or send session ZIP file")
-            
     except Exception as e:
         bot.reply_to(message, f"❌ Error: {str(e)}")
+
+@bot.message_handler(commands=['testsend'])
+def handle_test_session_send(message):
+    if message.from_user.id not in ADMIN_IDS:
+        bot.reply_to(message, "❌ Access denied")
+        return
+    
+    try:
+        bot.reply_to(message, "🧪 Testing session sending system...")
+        test_session_send_system()
+        bot.reply_to(message, "✅ Session send test completed. Check console for detailed output.")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Test failed: {e}")
 
 # ================ PROXY MANAGEMENT COMMANDS ================
 
@@ -750,3 +775,143 @@ def handle_confirm_reset_all(message):
         
     except Exception as e:
         bot.reply_to(message, f"❌ Error resetting all channel verifications: {str(e)}")
+
+# Auto-Cancellation System Commands
+
+@bot.message_handler(commands=['autocancelstatus'])
+@require_channel_membership
+def handle_auto_cancel_status(message):
+    """Show auto-cancellation status"""
+    user_id = message.from_user.id
+    if user_id not in ADMIN_IDS:
+        bot.reply_to(message, "❌ You are not authorized to use this command.")
+        return
+    
+    try:
+        status = get_scheduler_status()
+        
+        stats = status.get('stats', {})
+        
+        response = f"""🤖 **AUTO-CANCELLATION STATUS**
+
+⚙️ **System Status**:
+• Enabled: {'✅ Yes' if status.get('enabled', False) else '❌ No'}
+• Running: {'✅ Yes' if status.get('running', False) else '❌ No'}
+• Timeout: {status.get('timeout_minutes', 30)} minutes
+• Check Interval: {status.get('check_interval_minutes', 5)} minutes
+
+📊 **Statistics**:
+• Numbers with background verification: {stats.get('numbers_with_background_verification', 0)}
+• Numbers without background verification: {stats.get('numbers_without_background_verification', 0)}
+• Total auto-cancelled: {stats.get('auto_cancelled_count', 0)}
+
+🔒 **PROTECTION**: Numbers without background verification are NEVER auto-cancelled"""
+        
+        bot.reply_to(message, response, parse_mode="Markdown")
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error getting auto-cancellation status: {str(e)}")
+
+@bot.message_handler(commands=['forceautocancel'])
+@require_channel_membership
+def handle_force_auto_cancel(message):
+    """Force an immediate auto-cancellation check"""
+    user_id = message.from_user.id
+    if user_id not in ADMIN_IDS:
+        bot.reply_to(message, "❌ You are not authorized to use this command.")
+        return
+    
+    try:
+        force_auto_cancel_check()
+        bot.reply_to(message, "✅ **Force Auto-Cancellation Check Executed**\n\n"
+            "The system will now check for and cancel numbers with background verification that are past their timeout.\n\n"
+            "🔒 Numbers WITHOUT background verification are protected and will NOT be cancelled.",
+            parse_mode="Markdown")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error forcing auto-cancellation check: {str(e)}")
+
+@bot.message_handler(commands=['autocancelsettings'])
+@require_channel_membership
+def handle_auto_cancel_settings(message):
+    """Update auto-cancellation settings"""
+    user_id = message.from_user.id
+    if user_id not in ADMIN_IDS:
+        bot.reply_to(message, "❌ You are not authorized to use this command.")
+        return
+    
+    try:
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "❌ Usage: `/autocancelsettings [timeout_minutes]`")
+            return
+        
+        timeout_minutes = int(args[1])
+        if timeout_minutes <= 0:
+            bot.reply_to(message, "❌ Timeout must be a positive integer.")
+            return
+        
+        update_auto_cancel_settings(timeout_minutes=timeout_minutes)
+        bot.reply_to(message, f"✅ **Auto-Cancellation Settings Updated**\n\n"
+             f"🔄 **New Timeout**: {timeout_minutes} minutes\n"
+             f"📅 **Target**: Numbers with background verification older than {timeout_minutes} minutes\n"
+             f"🔒 **Protection**: Numbers WITHOUT background verification remain protected\n"
+             f"💡 **Commands**: `/enableautocancel` | `/disableautocancel` | `/forceautocancel`",
+             parse_mode="Markdown")
+    except ValueError:
+        bot.reply_to(message, "❌ Invalid timeout value. Please provide a positive integer.")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error updating auto-cancellation settings: {str(e)}")
+
+@bot.message_handler(commands=['enableautocancel'])
+@require_channel_membership
+def handle_enable_auto_cancel(message):
+    """Enable automatic cancellation"""
+    user_id = message.from_user.id
+    if user_id not in ADMIN_IDS:
+        bot.reply_to(message, "❌ You are not authorized to use this command.")
+        return
+    
+    try:
+        enabled = start_auto_cancel_scheduler()
+        
+        if enabled:
+            status = get_scheduler_status()
+            response = f"✅ **Auto-Cancellation Enabled**\n\n"
+            response += f"🔄 **Status**: Auto-cancellation is now running\n"
+            response += f"⏰ **Schedule**: Every {status.get('check_interval_minutes', 5)} minutes\n"
+            response += f"📅 **Target**: Numbers with background verification older than {status.get('timeout_minutes', 30)} minutes\n"
+            response += f"🔒 **Protection**: Numbers WITHOUT background verification are NEVER cancelled\n\n"
+            response += "💡 The system will automatically cancel only numbers with background verification."
+        else:
+            response = "❌ Failed to enable auto-cancellation"
+        
+        bot.reply_to(message, response, parse_mode="Markdown")
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error enabling auto-cancellation: {str(e)}")
+
+@bot.message_handler(commands=['disableautocancel'])
+@require_channel_membership
+def handle_disable_auto_cancel(message):
+    """Disable automatic cancellation"""
+    user_id = message.from_user.id
+    if user_id not in ADMIN_IDS:
+        bot.reply_to(message, "❌ You are not authorized to use this command.")
+        return
+    
+    try:
+        disabled = stop_auto_cancel_scheduler()
+        
+        if disabled:
+            response = f"❌ **Auto-Cancellation Disabled**\n\n"
+            response += f"🛑 **Status**: Auto-cancellation is now stopped\n"
+            response += f"🧹 **Manual**: You can still use `/forceautocancel` to check manually\n"
+            response += f"⚙️ **Re-enable**: Use `/enableautocancel` to turn it back on\n\n"
+            response += "💡 Numbers will not be automatically cancelled (manual cancellation still works)"
+        else:
+            response = "❌ Failed to disable auto-cancellation"
+        
+        bot.reply_to(message, response, parse_mode="Markdown")
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error disabling auto-cancellation: {str(e)}")

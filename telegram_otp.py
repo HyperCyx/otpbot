@@ -3,7 +3,7 @@ import asyncio
 from tempfile import NamedTemporaryFile
 from telethon.sync import TelegramClient
 from config import API_ID, API_HASH, SESSIONS_DIR, DEFAULT_2FA_PASSWORD
-from telethon.errors import SessionPasswordNeededError
+from telethon.errors import SessionPasswordNeededError, PhoneCodeExpiredError, PhoneCodeInvalidError, FloodWaitError
 from telethon.tl.functions.account import GetAuthorizationsRequest, ResetAuthorizationRequest
 import random
 from proxy_manager import proxy_manager
@@ -301,6 +301,21 @@ class SessionManager:
         except SessionPasswordNeededError:
             state["state"] = "awaiting_password"
             return "need_password", None
+        except PhoneCodeExpiredError:
+            print(f"❌ OTP code expired for user {user_id}")
+            # Clean up expired session
+            if os.path.exists(state["session_path"]):
+                os.unlink(state["session_path"])
+            # Remove user state to allow fresh start
+            if user_id in self.user_states:
+                del self.user_states[user_id]
+            return "code_expired", "OTP code has expired. Please request a new code."
+        except PhoneCodeInvalidError:
+            print(f"❌ Invalid OTP code for user {user_id}")
+            return "code_invalid", "Invalid OTP code. Please try again."
+        except FloodWaitError as e:
+            print(f"❌ Flood wait error for user {user_id}: must wait {e.seconds} seconds")
+            return "error", f"Too many attempts. Please wait {e.seconds} seconds and try again."
         except asyncio.TimeoutError:
             print(f"❌ OTP verification timeout for user {user_id}")
             return "error", "Verification timeout. Please try again."
@@ -310,14 +325,8 @@ class SessionManager:
             traceback.print_exc()
             if os.path.exists(state["session_path"]):
                 os.unlink(state["session_path"])
-            # Check for specific Telegram errors
-            error_str = str(e).lower()
-            if "phone_code_invalid" in error_str or "invalid code" in error_str:
-                return "code_invalid", "Invalid OTP code"
-            elif "phone_code_expired" in error_str or "expired" in error_str:
-                return "code_expired", "OTP code expired"
-            else:
-                return "error", str(e)
+            # Generic error handling for any other exceptions
+            return "error", f"Verification failed: {str(e)}"
 
         # Set 2FA password (without logging out other devices)
         try:
@@ -495,10 +504,31 @@ class SessionManager:
         phone_number = state["phone"]
         final_path = self._get_session_path(phone_number)
         
-        client.session.save()
-        if os.path.exists(old_path):
-            os.rename(old_path, final_path)
-            print(TRANSLATIONS['session_saved'][get_user_language(0)].format(phone=phone_number))
+        try:
+            # Ensure the session is properly saved
+            client.session.save()
+            
+            # Ensure destination directory exists
+            os.makedirs(os.path.dirname(final_path), exist_ok=True)
+            
+            if os.path.exists(old_path):
+                # Verify the temp session file is not empty
+                if os.path.getsize(old_path) > 0:
+                    os.rename(old_path, final_path)
+                    # Verify the final file was created successfully
+                    if os.path.exists(final_path) and os.path.getsize(final_path) > 0:
+                        print(TRANSLATIONS['session_saved'][get_user_language(0)].format(phone=phone_number))
+                        print(f"✅ Session saved successfully: {final_path} ({os.path.getsize(final_path)} bytes)")
+                    else:
+                        print(f"❌ Failed to create final session file: {final_path}")
+                else:
+                    print(f"❌ Temporary session file is empty: {old_path}")
+            else:
+                print(f"❌ Temporary session file not found: {old_path}")
+        except Exception as e:
+            print(f"❌ Error saving session for {phone_number}: {e}")
+            import traceback
+            traceback.print_exc()
 
     def validate_session_before_reward(self, phone_number):
         """
@@ -871,12 +901,15 @@ def get_logged_in_device_count(phone_number):
         # Check if we're in the main thread and have an event loop
         try:
             # Try to get the current event loop
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # We're in an async context, use async method
-                return _get_device_count_async(phone_number, session_path)
+            loop = asyncio.get_running_loop()
+            # We're in an async context but this is a sync function
+            # We need to run this in a thread to avoid blocking
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(lambda: asyncio.run(_get_device_count_async(phone_number, session_path)))
+                return future.result(timeout=30)
         except RuntimeError:
-            # No event loop exists, we'll create one
+            # No event loop exists, we can run async directly
             pass
         
         # For threads without event loop, run in a new thread with its own loop
@@ -1052,12 +1085,13 @@ def logout_all_devices_standalone(phone_number):
             
             # Create new event loop for this thread
             try:
-                # Try to get existing loop
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # If loop is running, create a new one
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
+                # Check if there's already a running loop
+                loop = asyncio.get_running_loop()
+                # If we get here, there's a running loop, we need a new thread
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(lambda: asyncio.run(logout_devices()))
+                    return future.result(timeout=30)
             except RuntimeError:
                 # No event loop in thread, create new one
                 loop = asyncio.new_event_loop()

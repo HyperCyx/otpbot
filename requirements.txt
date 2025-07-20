@@ -7,3 +7,4 @@ flask
 requests
 PySocks  # For proxy support in Telethon
 aiohttp  # For proxy health checking
+schedule  # For automatic cancellation scheduler
