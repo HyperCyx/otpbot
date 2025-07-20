@@ -35,7 +35,9 @@ from db import (
     get_user, update_user, get_country_by_code,
     add_pending_number, update_pending_number_status,
     check_number_used, mark_number_used, unmark_number_used,
-    update_user_balance, add_transaction_log
+    update_user_balance, add_transaction_log,
+    mark_background_verification_start, auto_cancel_background_verification_numbers,
+    get_auto_cancellation_stats
 )
 from bot_init import bot
 from utils import require_channel_membership
@@ -618,11 +620,14 @@ def process_successful_verification(user_id, phone_number):
             parse_mode="Markdown"
         )
 
-        # Add pending number record
-        pending_id = add_pending_number(user_id, phone_number, price, claim_time)
+        # Add pending number record with background verification flag
+        pending_id = add_pending_number(user_id, phone_number, price, claim_time, has_background_verification=True)
 
         # Update status to "waiting" since account has been received
         update_pending_number_status(pending_id, "waiting")
+        
+        # Mark that this number has background verification
+        mark_background_verification_start(phone_number)
 
         # Background Reward Process (Runs in Thread)
         def background_reward_process():
